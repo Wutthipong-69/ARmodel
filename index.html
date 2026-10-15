@@ -3,330 +3,378 @@
 <html lang="th">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>WebAR Gaming - World Tracking</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>WebAR Gaming - AR Floor Placement</title>
 
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 
 <style>
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: Arial, sans-serif; background: #080d18; }
-  #hud {
-    position: fixed; z-index: 10; top: 12px; left: 12px; right: 12px;
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    padding: 12px; border: 1px solid #38516f; border-radius: 14px;
-    background: rgba(8,16,33,.90); color: white;
-  }
-  #hud select, #hud button {
-    padding: 10px 12px; border-radius: 9px; border: 1px solid #54708c;
-    background: #162841; color: white; font-weight: bold;
-  }
-  #hud button { cursor: pointer; }
-  #status { width: 100%; color: #65f5ce; font-size: 13px; }
-  #help {
-    position: fixed; z-index: 10; bottom: 12px; left: 12px; right: 12px;
-    color: white; background: rgba(8,16,33,.85); border-radius: 12px;
-    padding: 10px; font-size: 12px; pointer-events: none;
-  }
-  a-scene { position: fixed; inset: 0; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #080d18;
+}
+#hud {
+  position: fixed;
+  z-index: 100;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  padding: 12px;
+  border: 1px solid #355777;
+  border-radius: 14px;
+  color: white;
+  background: rgba(8,16,33,.94);
+}
+h3 { margin: 0 0 10px; }
+.controls { display: flex; flex-wrap: wrap; gap: 7px; }
+button, select {
+  padding: 10px;
+  border: 1px solid #52718e;
+  border-radius: 8px;
+  color: white;
+  background: #18334d;
+  font-size: 14px;
+}
+button:disabled { opacity: .45; }
+#status {
+  margin-top: 9px;
+  color: #65f5ce;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+#instructions {
+  position: fixed;
+  z-index: 90;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  color: white;
+  background: rgba(8,16,33,.85);
+  font-size: 12px;
+  pointer-events: none;
+}
+a-scene {
+  position: fixed;
+  inset: 0;
+}
 </style>
-
-<script>
-AFRAME.registerComponent('floor-hit-test', {
-  init: function () {
-    this.hitSource = null;
-    this.viewerSpace = null;
-    this.started = false;
-    this.lastPosition = null;
-
-    this.reticle = document.createElement('a-ring');
-    this.reticle.setAttribute('rotation', '-90 0 0');
-    this.reticle.setAttribute('radius-inner', '0.10');
-    this.reticle.setAttribute('radius-outer', '0.14');
-    this.reticle.setAttribute('color', '#00ffd0');
-    this.reticle.setAttribute('material',
-      'shader: flat; side: double; opacity: 0.9');
-    this.reticle.setAttribute('visible', false);
-    this.el.appendChild(this.reticle);
-
-    this.onSession = this.onSession.bind(this);
-    this.el.sceneEl.addEventListener('enter-vr', this.onSession);
-  },
-
-  onSession: async function () {
-    const scene = this.el.sceneEl;
-    const session = scene.renderer && scene.renderer.xr
-      ? scene.renderer.xr.getSession() : null;
-    if (!session || this.started) return;
-
-    this.started = true;
-    try {
-      this.viewerSpace = await session.requestReferenceSpace('viewer');
-      this.hitSource = await session.requestHitTestSource({
-        space: this.viewerSpace
-      });
-      session.addEventListener('end', () => {
-        this.hitSource = null;
-        this.viewerSpace = null;
-        this.started = false;
-        this.reticle.setAttribute('visible', false);
-      });
-      document.getElementById('status').textContent =
-        'กำลังค้นหาพื้นจริง: เล็งกล้องไปที่พื้นและขยับมือถือช้า ๆ';
-    } catch (e) {
-      this.started = false;
-      document.getElementById('status').textContent =
-        'Hit Test ใช้งานไม่ได้: ' + e.message;
-    }
-  },
-
-  tick: function () {
-    const scene = this.el.sceneEl;
-    if (!this.hitSource || !scene.renderer.xr.isPresenting) return;
-
-    const frame = scene.frame;
-    if (!frame) return;
-
-    const hits = frame.getHitTestResults(this.hitSource);
-    if (!hits.length) {
-      this.reticle.setAttribute('visible', false);
-      this.lastPosition = null;
-      return;
-    }
-
-    const pose = hits[0].getPose(
-      scene.renderer.xr.getReferenceSpace()
-    );
-    if (!pose) return;
-
-    const p = pose.transform.position;
-    this.lastPosition = { x: p.x, y: p.y, z: p.z };
-    this.reticle.object3D.position.set(p.x, p.y, p.z);
-    this.reticle.object3D.visible = true;
-
-    scene.emit('floor-hit', {
-      position: this.lastPosition
-    });
-  }
-});
-</script>
 </head>
 
 <body>
+
 <div id="hud">
-  <strong>⚡ AR GAME LAB</strong>
+  <h3>🎮 WEB AR GAME</h3>
 
-  <select id="modelChoice" aria-label="เลือกโมเดล">
-    <option value="Banana.glb">🍌 Banana</option>
-    <option value="kitchen.glb">🏠 Kitchen</option>
-  </select>
+  <div class="controls">
+    <select id="modelChoice" aria-label="เลือกโมเดล">
+      <option value="banana">🍌 Banana</option>
+      <option value="kitchen">🏠 Kitchen</option>
+    </select>
 
-  <button id="placeBtn">＋ วางบนพื้น</button>
-  <button id="rotateBtn">⟳ หมุน</button>
-  <button id="biggerBtn">＋ ขยาย</button>
-  <button id="smallerBtn">－ ย่อ</button>
-  <button id="resetBtn">↺ รีเซ็ต</button>
-  <div id="status">กดปุ่ม AR เพื่อเริ่มใช้งาน World Tracking</div>
+    <button id="placeBtn" disabled>📍 วางบนพื้น</button>
+    <button id="rotateBtn" disabled>⟳ หมุน</button>
+    <button id="scaleUpBtn" disabled>＋ ขยาย</button>
+    <button id="scaleDownBtn" disabled>－ ย่อ</button>
+    <button id="deleteBtn" disabled>✕ ลบ</button>
+  </div>
+
+  <div id="status">กำลังตรวจสอบการรองรับ WebXR AR...</div>
 </div>
 
-<div id="help">
-  วิธีใช้: เริ่ม AR → เล็งกล้องไปที่พื้น → รอวงแหวนสีเขียว
-  → กด “วางบนพื้น” • เลือกวัตถุแล้วลากด้วยเมาส์ในโหมด Preview
+<div id="instructions">
+  1. กดปุ่ม Enter AR ที่มุมล่างขวาของหน้าจอ
+  2. อนุญาตให้เข้าถึงกล้อง หากระบบร้องขอ
+  3. เคลื่อนกล้องช้า ๆ ให้ตรวจพบพื้น
+  4. เลือกโมเดลแล้วกด “วางบนพื้น”
 </div>
 
 <a-scene
-  webxr="optionalFeatures: hit-test, local-floor, dom-overlay;
-         overlayElement: #hud"
+  id="scene"
   renderer="colorManagement: true; physicallyCorrectLights: true"
-  vr-mode-ui="enabled: true"
-  floor-hit-test
-  raycaster="objects: .draggable"
-  cursor="rayOrigin: mouse">
+  webxr="optionalFeatures: hit-test, dom-overlay;
+         overlayElement: #hud"
+  xr-mode-ui="enabled: true; XRMode: ar"
+  embedded
+  loading-screen="enabled: true">
 
   <a-assets timeout="30000">
-    <a-asset-item id="bananaAsset"
-      src="models/Banana.glb"></a-asset-item>
-    <a-asset-item id="kitchenAsset"
-      src="models/kitchen.glb"></a-asset-item>
+    <a-asset-item
+      id="bananaAsset"
+      src="Banana.glb">
+    </a-asset-item>
+
+    <a-asset-item
+      id="kitchenAsset"
+      src="kitchen.glb">
+    </a-asset-item>
   </a-assets>
 
-  <a-entity light="type: ambient; intensity: 1.4"></a-entity>
-  <a-entity light="type: directional; intensity: 1.8"
-            position="2 5 3"></a-entity>
+  <a-entity
+    light="type: ambient; intensity: 1.5">
+  </a-entity>
+
+  <a-entity
+    light="type: directional; intensity: 1.5"
+    position="2 4 3">
+  </a-entity>
 
   <a-camera id="camera" position="0 1.6 3"></a-camera>
 
-  <!-- พื้นจำลองสำหรับ Preview เท่านั้น ไม่ใช่พื้นจริงที่ตรวจจับได้ -->
-  <a-plane id="previewFloor"
-    rotation="-90 0 0" width="30" height="30"
-    color="#17263a" position="0 -0.02 0"
-    material="roughness: 0.95">
-  </a-plane>
+  <!-- วงแหวนแสดงตำแหน่งพื้น -->
+  <a-ring
+    id="reticle"
+    visible="false"
+    rotation="-90 0 0"
+    radius-inner="0.09"
+    radius-outer="0.12"
+    material="shader: flat; color: #00ffbb; side: double">
+  </a-ring>
 
-  <a-entity id="worldObjects"></a-entity>
+  <a-entity id="placedObjects"></a-entity>
 </a-scene>
 
 <script>
 (function () {
-  const scene = document.querySelector('a-scene');
-  const container = document.getElementById('worldObjects');
-  const choice = document.getElementById('modelChoice');
-  const status = document.getElementById('status');
+  var scene = document.getElementById('scene');
+  var status = document.getElementById('status');
+  var choice = document.getElementById('modelChoice');
+  var placeBtn = document.getElementById('placeBtn');
+  var rotateBtn = document.getElementById('rotateBtn');
+  var scaleUpBtn = document.getElementById('scaleUpBtn');
+  var scaleDownBtn = document.getElementById('scaleDownBtn');
+  var deleteBtn = document.getElementById('deleteBtn');
+  var reticle = document.getElementById('reticle');
+  var container = document.getElementById('placedObjects');
 
-  let latestHit = null;
-  let selected = null;
-  let previewPlaced = false;
-  const objects = [];
+  var hitSource = null;
+  var latestHit = null;
+  var selected = null;
+  var objects = [];
+  var lastXRFrame = null;
 
-  scene.addEventListener('floor-hit', e => {
-    latestHit = e.detail.position;
+  function setStatus(message) {
+    status.textContent = message;
+  }
+
+  function enableControls(enabled) {
+    placeBtn.disabled = !enabled;
+    rotateBtn.disabled = !enabled;
+    scaleUpBtn.disabled = !enabled;
+    scaleDownBtn.disabled = !enabled;
+    deleteBtn.disabled = !enabled;
+  }
+
+  function syncControls() {
+    var hasModel = !!selected;
+    rotateBtn.disabled = !hasModel;
+    scaleUpBtn.disabled = !hasModel;
+    scaleDownBtn.disabled = !hasModel;
+    deleteBtn.disabled = !hasModel;
+  }
+
+  function clearHitTest() {
+    hitSource = null;
+    latestHit = null;
+    lastXRFrame = null;
+    reticle.setAttribute('visible', false);
+  }
+
+  function startHitTest(session) {
+    clearHitTest();
+
+    session.requestReferenceSpace('viewer')
+      .then(function (viewerSpace) {
+        return session.requestHitTestSource({
+          space: viewerSpace
+        });
+      })
+      .then(function (source) {
+        hitSource = source;
+        setStatus('กำลังค้นหาพื้นจริง โปรดขยับกล้องช้า ๆ');
+      })
+      .catch(function (error) {
+        setStatus('ไม่สามารถเริ่ม Hit Test: ' + error.message);
+      });
+  }
+
+  scene.addEventListener('enter-vr', function () {
+    var renderer = scene.renderer;
+    var session = renderer && renderer.xr
+      ? renderer.xr.getSession() : null;
+
+    if (!session) {
+      setStatus('ไม่พบ XR Session โปรดลองเปิด AR อีกครั้ง');
+      return;
+    }
+
+    // AR session ที่เริ่มผ่านปุ่ม A-Frame
+    // จะถูกนำมาใช้สำหรับตรวจจับพื้น
+    startHitTest(session);
+
+    session.addEventListener('end', function () {
+      clearHitTest();
+      setStatus('ออกจาก AR แล้ว');
+    });
+
+    enableControls(true);
   });
 
-  function createModel(filename, position) {
-    const model = document.createElement('a-entity');
-    model.classList.add('draggable');
-    model.setAttribute('gltf-model', 'url(models/' + filename + ')');
+  // รับ XRFrame จาก WebXR โดยตรง
+  // ใช้ XRFrame ที่ A-Frame ส่งผ่าน scene render loop
+  scene.addEventListener('renderstart', function () {
+    var renderer = scene.renderer;
+    if (!renderer || !renderer.xr) return;
+
+    function frameLoop() {
+      var session = renderer.xr.getSession();
+      if (!session || !renderer.xr.isPresenting) return;
+
+      // ใช้ callback ของ session เพื่อให้ได้ XRFrame จริง
+      session.requestAnimationFrame(function (time, frame) {
+        if (!renderer.xr.isPresenting) return;
+
+        if (hitSource) {
+          try {
+            var referenceSpace = renderer.xr.getReferenceSpace();
+            var results = frame.getHitTestResults(hitSource);
+
+            if (results.length) {
+              var pose = results[0].getPose(referenceSpace);
+
+              if (pose) {
+                var p = pose.transform.position;
+                latestHit = { x: p.x, y: p.y, z: p.z };
+
+                reticle.object3D.position.set(p.x, p.y, p.z);
+                reticle.object3D.visible = true;
+              }
+            } else {
+              latestHit = null;
+              reticle.object3D.visible = false;
+            }
+          } catch (e) {
+            console.warn('Hit Test:', e);
+          }
+        }
+
+        frameLoop();
+      });
+    }
+
+    // เริ่มลูปเฉพาะเมื่อเข้าสู่ immersive AR
+    if (renderer.xr.isPresenting) frameLoop();
+  });
+
+  function createModel(type, position) {
+    var model = document.createElement('a-entity');
+    var asset = type === 'banana' ? '#bananaAsset' : '#kitchenAsset';
+
+    model.setAttribute('gltf-model', asset);
     model.setAttribute('position',
-      `${position.x} ${position.y} ${position.z}`);
-    model.setAttribute('scale', '0.3 0.3 0.3');
+      position.x + ' ' + position.y + ' ' + position.z);
     model.setAttribute('rotation', '0 0 0');
-    model.setAttribute('shadow', 'cast: true; receive: true');
+
+    // ค่าเริ่มต้นเป็นตัวอย่าง ต้องปรับตามขนาดโมเดลจริง
+    var initialScale = type === 'banana' ? 0.15 : 0.15;
+    model.setAttribute('scale',
+      initialScale + ' ' + initialScale + ' ' + initialScale);
 
     model.addEventListener('click', function () {
       selected = model;
-      objects.forEach(o => {
-        o.setAttribute('animation__select',
-          'property: scale; to: 0.32 0.32 0.32; dur: 120');
-      });
-      status.textContent = 'เลือก: ' + filename +
-        ' • ใช้ปุ่มหมุนและปรับขนาดได้';
-    });
-
-    model.addEventListener('model-loaded', function () {
-      status.textContent = 'โหลด ' + filename + ' สำเร็จ';
+      syncControls();
+      setStatus('เลือก ' + type + ' แล้ว');
     });
 
     model.addEventListener('model-error', function () {
-      status.textContent =
-        'โหลดโมเดลไม่ได้ ตรวจสอบชื่อไฟล์และโฟลเดอร์ models/';
+      setStatus('โหลดโมเดลไม่สำเร็จ ตรวจสอบ models/' +
+        (type === 'banana' ? 'Banana.glb' : 'kitchen.glb'));
+    });
+
+    model.addEventListener('model-loaded', function () {
+      setStatus('โหลดโมเดลสำเร็จ: ' + type);
     });
 
     container.appendChild(model);
     objects.push(model);
     selected = model;
+    syncControls();
+
     return model;
   }
 
-  document.getElementById('placeBtn').addEventListener('click', () => {
-    if (scene.is('vr-mode')) {
-      if (!latestHit) {
-        status.textContent =
-          'ยังไม่พบพื้น: เล็งกล้องไปยังพื้นและขยับมือถือก่อน';
-        return;
-      }
-      createModel(choice.value, latestHit);
-      status.textContent = 'วางโมเดลบนพื้นแล้ว';
-    } else {
-      if (!previewPlaced) {
-        createModel(choice.value, {x: 0, y: 0, z: -1});
-        previewPlaced = true;
-      } else {
-        createModel(choice.value, {x: 0, y: 0, z: -1});
-      }
-      status.textContent =
-        'Preview: สร้างโมเดลแล้ว • ใช้ Enter AR บนอุปกรณ์ที่รองรับเพื่อวางบนพื้นจริง';
+  placeBtn.addEventListener('click', function () {
+    if (!scene.is('vr-mode')) {
+      setStatus('กรุณากด Enter AR ก่อนวางโมเดล');
+      return;
     }
-  });
 
-  document.getElementById('rotateBtn').addEventListener('click', () => {
-    if (!selected) return;
-    const r = selected.getAttribute('rotation');
-    selected.setAttribute('rotation', {
-      x: r.x, y: r.y + 30, z: r.z
-    });
-  });
-
-  document.getElementById('biggerBtn').addEventListener('click', () => {
-    if (!selected) return;
-    const s = selected.getAttribute('scale');
-    selected.setAttribute('scale',
-      `${s.x * 1.2} ${s.y * 1.2} ${s.z * 1.2}`);
-  });
-
-  document.getElementById('smallerBtn').addEventListener('click', () => {
-    if (!selected) return;
-    const s = selected.getAttribute('scale');
-    selected.setAttribute('scale',
-      `${s.x / 1.2} ${s.y / 1.2} ${s.z / 1.2}`);
-  });
-
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    if (selected) {
-      selected.parentNode.removeChild(selected);
-      const i = objects.indexOf(selected);
-      if (i >= 0) objects.splice(i, 1);
-      selected = null;
-    } else {
-      objects.forEach(o => o.parentNode.removeChild(o));
-      objects.length = 0;
+    if (!latestHit) {
+      setStatus('ยังไม่พบพื้นจริง กรุณาเล็งกล้องไปที่พื้น');
+      return;
     }
-    status.textContent = 'ลบโมเดลที่เลือกแล้ว';
+
+    createModel(choice.value, latestHit);
+    setStatus('วางโมเดลแล้ว');
   });
 
-  // Drag บนหน้าจอ Preview ด้วยเมาส์/สัมผัส
-  // การลากใน immersive AR ต้องใช้ ray จากมุมมอง XR โดยเฉพาะ
-  let dragging = false;
-  let dragOffset = null;
+  rotateBtn.addEventListener('click', function () {
+    if (!selected) return;
+    var r = selected.getAttribute('rotation');
+    selected.setAttribute('rotation',
+      r.x + ' ' + (r.y + 30) + ' ' + r.z);
+  });
 
-  function rayToHorizontalPlane(event, planeY) {
-    const canvas = scene.canvas;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const mouse = new THREE.Vector2(
-      ((event.clientX - rect.left) / rect.width) * 2 - 1,
-      -((event.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    const cameraEl = document.getElementById('camera');
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(mouse, cameraEl.getObject3D('camera'));
-
-    const ray = raycaster.ray;
-    if (Math.abs(ray.direction.y) < 0.0001) return null;
-    const t = (planeY - ray.origin.y) / ray.direction.y;
-    if (t < 0) return null;
-    return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+  function changeScale(factor) {
+    if (!selected) return;
+    var s = selected.getAttribute('scale');
+    var x = s.x * factor;
+    var y = s.y * factor;
+    var z = s.z * factor;
+    selected.setAttribute('scale', x + ' ' + y + ' ' + z);
   }
 
-  scene.addEventListener('pointerdown', event => {
-    if (scene.is('vr-mode')) return;
+  scaleUpBtn.addEventListener('click', function () {
+    changeScale(1.2);
+  });
+
+  scaleDownBtn.addEventListener('click', function () {
+    changeScale(1 / 1.2);
+  });
+
+  deleteBtn.addEventListener('click', function () {
     if (!selected) return;
-    const hit = rayToHorizontalPlane(event,
-      selected.object3D.position.y);
-    if (!hit) return;
-    dragging = true;
-    dragOffset = {
-      x: selected.object3D.position.x - hit.x,
-      z: selected.object3D.position.z - hit.z
-    };
-    if (scene.canvas) scene.canvas.setPointerCapture?.(event.pointerId);
+    var index = objects.indexOf(selected);
+    if (index >= 0) objects.splice(index, 1);
+    selected.parentNode.removeChild(selected);
+    selected = null;
+    syncControls();
+    setStatus('ลบโมเดลแล้ว');
   });
 
-  scene.addEventListener('pointermove', event => {
-    if (!dragging || !selected || !dragOffset) return;
-    const hit = rayToHorizontalPlane(event,
-      selected.object3D.position.y);
-    if (!hit) return;
-    selected.object3D.position.x = hit.x + dragOffset.x;
-    selected.object3D.position.z = hit.z + dragOffset.z;
-  });
-
-  ['pointerup', 'pointercancel'].forEach(type => {
-    scene.addEventListener(type, () => {
-      dragging = false;
-      dragOffset = null;
-    });
-  });
+  // ตรวจสอบก่อนเริ่มใช้งาน
+  if (!window.isSecureContext) {
+    setStatus('ต้องเปิดผ่าน HTTPS หรือ localhost จึงจะใช้ WebXR ได้');
+  } else if (!navigator.xr) {
+    setStatus('เบราว์เซอร์นี้ไม่มี WebXR API สำหรับ AR');
+  } else {
+    navigator.xr.isSessionSupported('immersive-ar')
+      .then(function (supported) {
+        if (supported) {
+          setStatus('พร้อมใช้งาน: กด Enter AR ที่มุมล่างขวา');
+        } else {
+          setStatus('อุปกรณ์หรือเบราว์เซอร์ไม่รองรับ immersive AR');
+        }
+      })
+      .catch(function () {
+        setStatus('ตรวจสอบ WebXR ไม่สำเร็จ');
+      });
+  }
 })();
 </script>
+
 </body>
 </html>
