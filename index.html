@@ -1,0 +1,332 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WebAR Gaming - World Tracking</title>
+
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Arial, sans-serif; background: #080d18; }
+  #hud {
+    position: fixed; z-index: 10; top: 12px; left: 12px; right: 12px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 12px; border: 1px solid #38516f; border-radius: 14px;
+    background: rgba(8,16,33,.90); color: white;
+  }
+  #hud select, #hud button {
+    padding: 10px 12px; border-radius: 9px; border: 1px solid #54708c;
+    background: #162841; color: white; font-weight: bold;
+  }
+  #hud button { cursor: pointer; }
+  #status { width: 100%; color: #65f5ce; font-size: 13px; }
+  #help {
+    position: fixed; z-index: 10; bottom: 12px; left: 12px; right: 12px;
+    color: white; background: rgba(8,16,33,.85); border-radius: 12px;
+    padding: 10px; font-size: 12px; pointer-events: none;
+  }
+  a-scene { position: fixed; inset: 0; }
+</style>
+
+<script>
+AFRAME.registerComponent('floor-hit-test', {
+  init: function () {
+    this.hitSource = null;
+    this.viewerSpace = null;
+    this.started = false;
+    this.lastPosition = null;
+
+    this.reticle = document.createElement('a-ring');
+    this.reticle.setAttribute('rotation', '-90 0 0');
+    this.reticle.setAttribute('radius-inner', '0.10');
+    this.reticle.setAttribute('radius-outer', '0.14');
+    this.reticle.setAttribute('color', '#00ffd0');
+    this.reticle.setAttribute('material',
+      'shader: flat; side: double; opacity: 0.9');
+    this.reticle.setAttribute('visible', false);
+    this.el.appendChild(this.reticle);
+
+    this.onSession = this.onSession.bind(this);
+    this.el.sceneEl.addEventListener('enter-vr', this.onSession);
+  },
+
+  onSession: async function () {
+    const scene = this.el.sceneEl;
+    const session = scene.renderer && scene.renderer.xr
+      ? scene.renderer.xr.getSession() : null;
+    if (!session || this.started) return;
+
+    this.started = true;
+    try {
+      this.viewerSpace = await session.requestReferenceSpace('viewer');
+      this.hitSource = await session.requestHitTestSource({
+        space: this.viewerSpace
+      });
+      session.addEventListener('end', () => {
+        this.hitSource = null;
+        this.viewerSpace = null;
+        this.started = false;
+        this.reticle.setAttribute('visible', false);
+      });
+      document.getElementById('status').textContent =
+        'กำลังค้นหาพื้นจริง: เล็งกล้องไปที่พื้นและขยับมือถือช้า ๆ';
+    } catch (e) {
+      this.started = false;
+      document.getElementById('status').textContent =
+        'Hit Test ใช้งานไม่ได้: ' + e.message;
+    }
+  },
+
+  tick: function () {
+    const scene = this.el.sceneEl;
+    if (!this.hitSource || !scene.renderer.xr.isPresenting) return;
+
+    const frame = scene.frame;
+    if (!frame) return;
+
+    const hits = frame.getHitTestResults(this.hitSource);
+    if (!hits.length) {
+      this.reticle.setAttribute('visible', false);
+      this.lastPosition = null;
+      return;
+    }
+
+    const pose = hits[0].getPose(
+      scene.renderer.xr.getReferenceSpace()
+    );
+    if (!pose) return;
+
+    const p = pose.transform.position;
+    this.lastPosition = { x: p.x, y: p.y, z: p.z };
+    this.reticle.object3D.position.set(p.x, p.y, p.z);
+    this.reticle.object3D.visible = true;
+
+    scene.emit('floor-hit', {
+      position: this.lastPosition
+    });
+  }
+});
+</script>
+</head>
+
+<body>
+<div id="hud">
+  <strong>⚡ AR GAME LAB</strong>
+
+  <select id="modelChoice" aria-label="เลือกโมเดล">
+    <option value="Banana.glb">🍌 Banana</option>
+    <option value="kitchen.glb">🏠 Kitchen</option>
+  </select>
+
+  <button id="placeBtn">＋ วางบนพื้น</button>
+  <button id="rotateBtn">⟳ หมุน</button>
+  <button id="biggerBtn">＋ ขยาย</button>
+  <button id="smallerBtn">－ ย่อ</button>
+  <button id="resetBtn">↺ รีเซ็ต</button>
+  <div id="status">กดปุ่ม AR เพื่อเริ่มใช้งาน World Tracking</div>
+</div>
+
+<div id="help">
+  วิธีใช้: เริ่ม AR → เล็งกล้องไปที่พื้น → รอวงแหวนสีเขียว
+  → กด “วางบนพื้น” • เลือกวัตถุแล้วลากด้วยเมาส์ในโหมด Preview
+</div>
+
+<a-scene
+  webxr="optionalFeatures: hit-test, local-floor, dom-overlay;
+         overlayElement: #hud"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  vr-mode-ui="enabled: true"
+  floor-hit-test
+  raycaster="objects: .draggable"
+  cursor="rayOrigin: mouse">
+
+  <a-assets timeout="30000">
+    <a-asset-item id="bananaAsset"
+      src="models/Banana.glb"></a-asset-item>
+    <a-asset-item id="kitchenAsset"
+      src="models/kitchen.glb"></a-asset-item>
+  </a-assets>
+
+  <a-entity light="type: ambient; intensity: 1.4"></a-entity>
+  <a-entity light="type: directional; intensity: 1.8"
+            position="2 5 3"></a-entity>
+
+  <a-camera id="camera" position="0 1.6 3"></a-camera>
+
+  <!-- พื้นจำลองสำหรับ Preview เท่านั้น ไม่ใช่พื้นจริงที่ตรวจจับได้ -->
+  <a-plane id="previewFloor"
+    rotation="-90 0 0" width="30" height="30"
+    color="#17263a" position="0 -0.02 0"
+    material="roughness: 0.95">
+  </a-plane>
+
+  <a-entity id="worldObjects"></a-entity>
+</a-scene>
+
+<script>
+(function () {
+  const scene = document.querySelector('a-scene');
+  const container = document.getElementById('worldObjects');
+  const choice = document.getElementById('modelChoice');
+  const status = document.getElementById('status');
+
+  let latestHit = null;
+  let selected = null;
+  let previewPlaced = false;
+  const objects = [];
+
+  scene.addEventListener('floor-hit', e => {
+    latestHit = e.detail.position;
+  });
+
+  function createModel(filename, position) {
+    const model = document.createElement('a-entity');
+    model.classList.add('draggable');
+    model.setAttribute('gltf-model', 'url(models/' + filename + ')');
+    model.setAttribute('position',
+      `${position.x} ${position.y} ${position.z}`);
+    model.setAttribute('scale', '0.3 0.3 0.3');
+    model.setAttribute('rotation', '0 0 0');
+    model.setAttribute('shadow', 'cast: true; receive: true');
+
+    model.addEventListener('click', function () {
+      selected = model;
+      objects.forEach(o => {
+        o.setAttribute('animation__select',
+          'property: scale; to: 0.32 0.32 0.32; dur: 120');
+      });
+      status.textContent = 'เลือก: ' + filename +
+        ' • ใช้ปุ่มหมุนและปรับขนาดได้';
+    });
+
+    model.addEventListener('model-loaded', function () {
+      status.textContent = 'โหลด ' + filename + ' สำเร็จ';
+    });
+
+    model.addEventListener('model-error', function () {
+      status.textContent =
+        'โหลดโมเดลไม่ได้ ตรวจสอบชื่อไฟล์และโฟลเดอร์ models/';
+    });
+
+    container.appendChild(model);
+    objects.push(model);
+    selected = model;
+    return model;
+  }
+
+  document.getElementById('placeBtn').addEventListener('click', () => {
+    if (scene.is('vr-mode')) {
+      if (!latestHit) {
+        status.textContent =
+          'ยังไม่พบพื้น: เล็งกล้องไปยังพื้นและขยับมือถือก่อน';
+        return;
+      }
+      createModel(choice.value, latestHit);
+      status.textContent = 'วางโมเดลบนพื้นแล้ว';
+    } else {
+      if (!previewPlaced) {
+        createModel(choice.value, {x: 0, y: 0, z: -1});
+        previewPlaced = true;
+      } else {
+        createModel(choice.value, {x: 0, y: 0, z: -1});
+      }
+      status.textContent =
+        'Preview: สร้างโมเดลแล้ว • ใช้ Enter AR บนอุปกรณ์ที่รองรับเพื่อวางบนพื้นจริง';
+    }
+  });
+
+  document.getElementById('rotateBtn').addEventListener('click', () => {
+    if (!selected) return;
+    const r = selected.getAttribute('rotation');
+    selected.setAttribute('rotation', {
+      x: r.x, y: r.y + 30, z: r.z
+    });
+  });
+
+  document.getElementById('biggerBtn').addEventListener('click', () => {
+    if (!selected) return;
+    const s = selected.getAttribute('scale');
+    selected.setAttribute('scale',
+      `${s.x * 1.2} ${s.y * 1.2} ${s.z * 1.2}`);
+  });
+
+  document.getElementById('smallerBtn').addEventListener('click', () => {
+    if (!selected) return;
+    const s = selected.getAttribute('scale');
+    selected.setAttribute('scale',
+      `${s.x / 1.2} ${s.y / 1.2} ${s.z / 1.2}`);
+  });
+
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (selected) {
+      selected.parentNode.removeChild(selected);
+      const i = objects.indexOf(selected);
+      if (i >= 0) objects.splice(i, 1);
+      selected = null;
+    } else {
+      objects.forEach(o => o.parentNode.removeChild(o));
+      objects.length = 0;
+    }
+    status.textContent = 'ลบโมเดลที่เลือกแล้ว';
+  });
+
+  // Drag บนหน้าจอ Preview ด้วยเมาส์/สัมผัส
+  // การลากใน immersive AR ต้องใช้ ray จากมุมมอง XR โดยเฉพาะ
+  let dragging = false;
+  let dragOffset = null;
+
+  function rayToHorizontalPlane(event, planeY) {
+    const canvas = scene.canvas;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const mouse = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1
+    );
+    const cameraEl = document.getElementById('camera');
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, cameraEl.getObject3D('camera'));
+
+    const ray = raycaster.ray;
+    if (Math.abs(ray.direction.y) < 0.0001) return null;
+    const t = (planeY - ray.origin.y) / ray.direction.y;
+    if (t < 0) return null;
+    return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
+  }
+
+  scene.addEventListener('pointerdown', event => {
+    if (scene.is('vr-mode')) return;
+    if (!selected) return;
+    const hit = rayToHorizontalPlane(event,
+      selected.object3D.position.y);
+    if (!hit) return;
+    dragging = true;
+    dragOffset = {
+      x: selected.object3D.position.x - hit.x,
+      z: selected.object3D.position.z - hit.z
+    };
+    if (scene.canvas) scene.canvas.setPointerCapture?.(event.pointerId);
+  });
+
+  scene.addEventListener('pointermove', event => {
+    if (!dragging || !selected || !dragOffset) return;
+    const hit = rayToHorizontalPlane(event,
+      selected.object3D.position.y);
+    if (!hit) return;
+    selected.object3D.position.x = hit.x + dragOffset.x;
+    selected.object3D.position.z = hit.z + dragOffset.z;
+  });
+
+  ['pointerup', 'pointercancel'].forEach(type => {
+    scene.addEventListener(type, () => {
+      dragging = false;
+      dragOffset = null;
+    });
+  });
+})();
+</script>
+</body>
+</html>

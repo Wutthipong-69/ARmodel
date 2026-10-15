@@ -1,0 +1,165 @@
+
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>AR Gaming - Marker Tracking</title>
+
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/3.4.8/aframe/build/aframe-ar.js"></script>
+
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; }
+  #ui {
+    position: fixed; z-index: 20; top: 10px; left: 10px; right: 10px;
+    color: white; background: rgba(7,15,30,.91);
+    border: 1px solid #45617c; border-radius: 12px; padding: 12px;
+  }
+  button {
+    background: #123b54; border: 1px solid #47d9cb; color: white;
+    padding: 9px 12px; margin: 3px; border-radius: 8px;
+  }
+  #info { font-size: 13px; color: #6fffe0; margin-top: 6px; }
+  .hint { font-size: 12px; color: #d8e6f5; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <strong>🎮 AR MARKER GAME</strong><br>
+  <button id="bananaBtn">🍌 เลือก Banana</button>
+  <button id="kitchenBtn">🏠 เลือก Kitchen</button>
+  <button id="rotateBtn">⟳ หมุน</button>
+  <button id="scaleBtn">＋ ขยาย</button>
+  <button id="moveBtn">↔ เลื่อน</button>
+  <div id="info">อนุญาตใช้กล้อง แล้วสแกน Marker</div>
+  <div class="hint">
+    HIRO = Banana • KANJI = Kitchen • เลือกโมเดลแล้วใช้ปุ่มควบคุม
+  </div>
+</div>
+
+<a-scene
+  embedded
+  vr-mode-ui="enabled: false"
+  renderer="colorManagement: true; logarithmicDepthBuffer: true"
+  arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false">
+
+  <a-assets timeout="30000">
+    <a-asset-item id="bananaAsset"
+      src="models/Banana.glb"></a-asset-item>
+    <a-asset-item id="kitchenAsset"
+      src="models/kitchen.glb"></a-asset-item>
+  </a-assets>
+
+  <!-- Marker HIRO -->
+  <a-marker id="bananaMarker" preset="hiro">
+    <a-entity id="bananaModel"
+      gltf-model="#bananaAsset"
+      position="0 0.05 0"
+      rotation="0 0 0"
+      scale="0.25 0.25 0.25"
+      class="ar-model">
+    </a-entity>
+    <a-entity position="0 0.65 0"
+      text="value: BANANA; align: center; color: #FFFF00; width: 2">
+    </a-entity>
+  </a-marker>
+
+  <!-- Marker KANJI -->
+  <a-marker id="kitchenMarker" preset="kanji">
+    <a-entity id="kitchenModel"
+      gltf-model="#kitchenAsset"
+      position="0 0.05 0"
+      rotation="0 0 0"
+      scale="0.15 0.15 0.15"
+      class="ar-model">
+    </a-entity>
+    <a-entity position="0 0.65 0"
+      text="value: KITCHEN; align: center; color: #00FFFF; width: 2">
+    </a-entity>
+  </a-marker>
+
+  <a-entity camera></a-entity>
+</a-scene>
+
+<script>
+(function () {
+  const banana = document.getElementById('bananaModel');
+  const kitchen = document.getElementById('kitchenModel');
+  const info = document.getElementById('info');
+
+  let selected = banana;
+  let moveMode = false;
+
+  function choose(model, name) {
+    selected = model;
+    info.textContent = 'เลือก ' + name +
+      ' แล้ว • สแกน Marker ที่ตรงกันเพื่อแสดงโมเดล';
+  }
+
+  document.getElementById('bananaBtn').onclick = function () {
+    choose(banana, 'Banana');
+  };
+
+  document.getElementById('kitchenBtn').onclick = function () {
+    choose(kitchen, 'Kitchen');
+  };
+
+  document.getElementById('rotateBtn').onclick = function () {
+    const r = selected.getAttribute('rotation');
+    selected.setAttribute('rotation', {
+      x: r.x, y: r.y + 15, z: r.z
+    });
+  };
+
+  document.getElementById('scaleBtn').onclick = function () {
+    const s = selected.getAttribute('scale');
+    const n = s.x * 1.15;
+    selected.setAttribute('scale', `${n} ${n} ${n}`);
+  };
+
+  document.getElementById('moveBtn').onclick = function () {
+    moveMode = !moveMode;
+    info.textContent = moveMode
+      ? 'โหมดเลื่อน: กดปุ่มอีกครั้งเพื่อปิด • ใช้ลูกศรบนคีย์บอร์ด'
+      : 'ปิดโหมดเลื่อนแล้ว';
+  };
+
+  // ย้ายโมเดลในพิกัดของ Marker ด้วยคีย์บอร์ด
+  window.addEventListener('keydown', function (e) {
+    if (!moveMode || !selected) return;
+    const p = selected.getAttribute('position');
+    const step = 0.03;
+
+    if (e.key === 'ArrowLeft') p.x -= step;
+    if (e.key === 'ArrowRight') p.x += step;
+    if (e.key === 'ArrowUp') p.z -= step;
+    if (e.key === 'ArrowDown') p.z += step;
+
+    selected.setAttribute('position', p);
+  });
+
+  document.getElementById('bananaMarker')
+    .addEventListener('markerFound', () => {
+      info.textContent = 'ตรวจพบ HIRO • Banana';
+    });
+
+  document.getElementById('kitchenMarker')
+    .addEventListener('markerFound', () => {
+      info.textContent = 'ตรวจพบ KANJI • Kitchen';
+    });
+
+  banana.addEventListener('model-error', () => {
+    info.textContent = 'โหลด Banana ไม่สำเร็จ กรุณาตรวจสอบไฟล์ GLB';
+  });
+
+  kitchen.addEventListener('model-error', () => {
+    info.textContent = 'โหลด Kitchen ไม่สำเร็จ กรุณาตรวจสอบไฟล์ GLB';
+  });
+})();
+</script>
+
+</body>
+</html>
