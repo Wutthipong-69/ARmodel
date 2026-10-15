@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR 3D Interactive Model Viewer</title>
 
-  <!-- A-Frame Version 1.2.0 (รุ่นที่ทำงานเสถียรที่สุดร่วมกับ AR.js) -->
+  <!-- A-Frame Version 1.2.0 -->
   <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-  <!-- AR.js สำหรับ A-Frame -->
+  <!-- AR.js for A-Frame -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
   <style>
@@ -16,16 +16,16 @@
       overflow: hidden;
       font-family: sans-serif;
       user-select: none;
+      touch-action: none; /* ป้องกันการ Scroll หน้าจอ Browser บนมือถือ */
     }
 
-    /* หน้าต่างปุ่มขอสิทธิ์เปิดกล้องแบบแมนนวล เผื่อบราวเซอร์บล็อก */
     #start-overlay {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(0, 0, 0, 0.85);
+      background: rgba(0, 0, 0, 0.9);
       z-index: 99999;
       display: flex;
       flex-direction: column;
@@ -36,7 +36,6 @@
       padding: 20px;
     }
 
-    /* UI ควบคุม */
     #ui-container {
       position: absolute;
       top: 15px;
@@ -68,6 +67,7 @@
       font-size: 18px;
       padding: 15px 30px;
       border-radius: 30px;
+      margin-top: 15px;
     }
 
     .btn-secondary {
@@ -84,38 +84,38 @@
       background: rgba(0,0,0,0.7);
       padding: 8px 18px;
       border-radius: 15px;
-      font-size: 13px;
+      font-size: 12px;
       text-align: center;
       pointer-events: none;
-      width: 80%;
-      max-width: 350px;
+      width: 85%;
+      max-width: 380px;
     }
   </style>
 </head>
 <body>
 
-  <!-- Overlay สำหรับเปิดใช้งานกล้อง -->
+  <!-- Overlay เปิดกล้อง -->
   <div id="start-overlay">
     <h2>แอพพลิเคชัน AR 3D Viewer</h2>
-    <p>กดปุ่มด้านล่างเพื่ออนุญาตให้ใช้งานกล้องมือถือ</p>
+    <p>กดปุ่มด้านล่างเพื่อเริ่มใช้งาน AR</p>
     <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
   </div>
 
-  <!-- Controls GUI -->
+  <!-- UI Controls -->
   <div id="ui-container">
     <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
     <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
   </div>
 
   <div id="info-text">
-    ส่องกล้องไปที่ Hiro Marker หรือแตะลากวัตถุบนหน้าจอ
+    👆 ลาก 1 นิ้วเพื่อย้ายวัตถุ (ขึ้น/ลง/ซ้าย/ขวา)<br>
+    🤌 ถ่าง/หนีบ 2 นิ้วเพื่อย่อ-ขยายโมเดล
   </div>
 
-  <!-- A-Frame Scene
-        arjs="sourceType: webcam" ตัวนี้ทำหน้าที่เปิดกล้องมือถือให้อัตโนมัติ -->
+  <!-- A-Frame Scene -->
   <a-scene 
     embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; facingMode: environment;"
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; sourceWidth:1280; sourceHeight:720; displayWidth:1280; displayHeight:720;"
     renderer="logarithmicDepthBuffer: true; colorManagement: true;"
     cursor="rayOrigin: mouse"
     raycaster="objects: .clickable">
@@ -127,13 +127,13 @@
     </a-assets>
 
     <!-- Camera -->
-    <a-entity camera look-controls id="main-camera"></a-entity>
+    <a-entity camera look-controls="enabled: false" id="main-camera"></a-entity>
 
     <!-- Light -->
     <a-entity light="type: ambient; intensity: 0.9;"></a-entity>
     <a-entity light="type: directional; intensity: 0.6;" position="1 4 2"></a-entity>
 
-    <!-- Marker Tracking (ส่องรูป Hiro Marker) -->
+    <!-- Hiro Marker Tracking -->
     <a-marker preset="hiro" id="hiro-marker">
       <a-entity 
         id="marker-banana"
@@ -141,70 +141,99 @@
         scale="0.2 0.2 0.2" 
         position="0 0 0"
         class="clickable"
-        drag-and-drop>
+        ar-touch-controls>
       </a-entity>
     </a-marker>
 
-    <!-- Container สำหรับโหมดวางวัตถุบนหน้าจอ / พื้น -->
+    <!-- Container สำหรับ Free Placement -->
     <a-entity id="world-container" position="0 0 -2"></a-entity>
 
   </a-scene>
 
   <script>
     // -------------------------------------------------------------
-    // 1. ระบบจัดการ Permission การเปิดกล้องบนสมาร์ทโฟน
+    // 1. ระบบจัดการ Permission การใช้กล้อง
     // -------------------------------------------------------------
-    document.getElementById('start-btn').addEventListener('click', async () => {
-      try {
-        // ขอสิทธิ์ใช้กล้องหลังจากกดปุ่ม
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: { exact: "environment" } } 
-        });
-        
-        // หากได้รับสิทธิ์ ให้ซ่อน Overlay และให้ AR.js ทำงานต่อ
-        document.getElementById('start-overlay').style.display = 'none';
-        
-        // หยุด Stream ชั่วคราวเพื่อให้ AR.js จัดการต่อเอง
-        stream.getTracks().forEach(track => track.stop());
-      } catch (err) {
-        // กรณีอุปกรณ์ไม่มีกล้องหลัง (เช่น ในคอมพิวเตอร์) ให้ลองขอใช้กล้องทั่วไป
-        try {
-          await navigator.mediaDevices.getUserMedia({ video: true });
+    document.getElementById('start-btn').addEventListener('click', function() {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(function(stream) {
+          stream.getTracks().forEach(track => track.stop());
           document.getElementById('start-overlay').style.display = 'none';
-        } catch (e) {
-          alert("ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้องในตั้งค่าบราวเซอร์");
-        }
+        })
+        .catch(function(err) {
+          document.getElementById('start-overlay').style.display = 'none';
+        });
+      } else {
+        document.getElementById('start-overlay').style.display = 'none';
       }
     });
 
     // -------------------------------------------------------------
-    // 2. ระบบ Drag and Drop เคลื่อนย้ายวัตถุบนหน้าจอ
+    // 2. Component รองรับการลากแนวดิ่ง/แนวนอน + ย่อ-ขยายด้วย 2 นิ้ว
     // -------------------------------------------------------------
-    AFRAME.registerComponent('drag-and-drop', {
+    AFRAME.registerComponent('ar-touch-controls', {
       init: function () {
+        this.isDragging = false;
+        this.initialPinchDistance = null;
+        this.initialScale = { x: 1, y: 1, z: 1 };
+        this.camera = document.querySelector('#main-camera').object3D;
+
+        // Event Listeners สำหรับการสัมผัสหน้าจอ
         this.el.addEventListener('mousedown', this.onDragStart.bind(this));
-        this.el.addEventListener('touchstart', this.onDragStart.bind(this));
+        this.el.addEventListener('touchstart', this.onTouchStart.bind(this));
         
         window.addEventListener('mousemove', this.onDragMove.bind(this));
-        window.addEventListener('touchmove', this.onDragMove.bind(this));
+        window.addEventListener('touchmove', this.onTouchMove.bind(this));
 
         window.addEventListener('mouseup', this.onDragEnd.bind(this));
-        window.addEventListener('touchend', this.onDragEnd.bind(this));
+        window.addEventListener('touchend', this.onTouchEnd.bind(this));
+      },
 
-        this.isDragging = false;
-        this.camera = document.querySelector('#main-camera').object3D;
+      // เริ่มจับการสัมผัสแบบ Touch
+      onTouchStart: function (evt) {
+        if (evt.touches.length === 1) {
+          // 1 นิ้ว: ลากย้ายตำแหน่ง
+          this.isDragging = true;
+        } else if (evt.touches.length === 2) {
+          // 2 นิ้ว: เริ่มย่อ-ขยาย (Pinch)
+          this.isDragging = false;
+          this.initialPinchDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          this.initialScale = Object.assign({}, this.el.object3D.scale);
+        }
       },
 
       onDragStart: function (evt) {
         this.isDragging = true;
       },
 
+      // ควบคุมการย้ายตำแหน่ง (ลากได้ทั้งแนวดิ่ง Y และแนวนอน X/Z)
+      onTouchMove: function (evt) {
+        if (evt.touches.length === 1 && this.isDragging) {
+          this.moveObject(evt.touches[0].clientX, evt.touches[0].clientY);
+        } else if (evt.touches.length === 2 && this.initialPinchDistance) {
+          // คำนวณระยะห่างระหว่าง 2 นิ้วเพื่อย่อ-ขยาย
+          let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          let factor = currentDistance / this.initialPinchDistance;
+
+          let newScale = {
+            x: Math.max(0.01, this.initialScale.x * factor),
+            y: Math.max(0.01, this.initialScale.y * factor),
+            z: Math.max(0.01, this.initialScale.z * factor)
+          };
+
+          this.el.object3D.scale.set(newScale.x, newScale.y, newScale.z);
+        }
+      },
+
       onDragMove: function (evt) {
-        if (!this.isDragging) return;
+        if (this.isDragging) {
+          this.moveObject(evt.clientX, evt.clientY);
+        }
+      },
 
-        let clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-        let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-
+      // ฟังก์ชันคำนวณตำแหน่งวัตถุใน 3D space รองรับทั้งแนวตั้งและแนวนอน
+      moveObject: function (clientX, clientY) {
         let mouse = new THREE.Vector2(
           (clientX / window.innerWidth) * 2 - 1,
           -(clientY / window.innerHeight) * 2 + 1
@@ -213,16 +242,43 @@
         let raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, this.camera);
 
-        let plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 2);
-        let targetPos = new THREE.Vector3();
+        // สร้าง Plane เสมือนขนานกับกล้อง เพื่อให้ลากวัตถุ ขึ้น-ลง-ซ้าย-ขวา ได้อย่างเป็นธรรมชาติ
+        let targetDistance = 2; // ระยะห่างจากกล้อง
+        let cameraPlane = new THREE.Plane();
+        let cameraDir = new THREE.Vector3();
         
-        if (raycaster.ray.intersectPlane(plane, targetPos)) {
+        this.camera.getWorldDirection(cameraDir);
+        let planePoint = this.camera.position.clone().add(cameraDir.multiplyScalar(targetDistance));
+        cameraPlane.setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+
+        let targetPos = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(cameraPlane, targetPos)) {
+          // หากโมเดลอยู่ภายใต้ Parent (เช่น Marker) ให้แปลงพิกัด World เป็น Local
+          if (this.el.parentNode && this.el.parentNode.object3D) {
+            this.el.parentNode.object3D.worldToLocal(targetPos);
+          }
           this.el.object3D.position.copy(targetPos);
         }
       },
 
-      onDragEnd: function (evt) {
+      onTouchEnd: function (evt) {
+        if (evt.touches.length < 2) {
+          this.initialPinchDistance = null;
+        }
+        if (evt.touches.length === 0) {
+          this.isDragging = false;
+        }
+      },
+
+      onDragEnd: function () {
         this.isDragging = false;
+      },
+
+      // ฟังก์ชันคำนวณระยะห่างระหว่างจุดสัมผัส 2 จุด
+      getDistance: function (touch1, touch2) {
+        let dx = touch1.clientX - touch2.clientX;
+        let dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
       }
     });
 
@@ -241,12 +297,14 @@
         newEntity.setAttribute('scale', '0.08 0.08 0.08');
       }
 
-      const randomX = (Math.random() - 0.5) * 1.2;
-      const randomY = (Math.random() - 0.5) * 0.8;
+      const randomX = (Math.random() - 0.5) * 1.0;
+      const randomY = (Math.random() - 0.5) * 0.6;
       
       newEntity.setAttribute('position', `${randomX} ${randomY} -1.5`);
       newEntity.setAttribute('class', 'clickable');
-      newEntity.setAttribute('drag-and-drop', '');
+      
+      // ติดตั้ง Component ควบคุมสัมผัส ลากแนวดิ่ง และ Pinch Scale
+      newEntity.setAttribute('ar-touch-controls', '');
 
       container.appendChild(newEntity);
     }
