@@ -12,7 +12,7 @@
 
   <style>
     * {
-      touch-action: none; /* บล็อก Gesture พื้นฐานของ Browser ไม่ให้กวน AR Controls */
+      touch-action: none;
     }
 
     body {
@@ -21,7 +21,7 @@
       font-family: sans-serif;
       user-select: none;
       -webkit-user-select: none;
-      background-color: #000; /* กันจอขาวขณะรอเปิดกล้อง */
+      background-color: #000;
     }
 
     #start-overlay {
@@ -41,7 +41,6 @@
       padding: 20px;
     }
 
-    /* UI ด้านบน: ปุ่มเพิ่มวัตถุ */
     #ui-container {
       position: absolute;
       top: 15px;
@@ -87,7 +86,6 @@
       border-radius: 12px;
     }
 
-    /* UI ด้านล่าง: แถบแนวนอนสำหรับปรับขนาด + สลับโหมดการลาก */
     #bottom-panel {
       position: absolute;
       bottom: 20px;
@@ -141,20 +139,20 @@
 </head>
 <body>
 
-  <!-- Overlay เปิดกล้อง -->
+  <!-- Overlay สำหรับปลดล็อค Permission กล้อง -->
   <div id="start-overlay">
     <h2>แอพพลิเคชัน AR 3D Viewer</h2>
-    <p>กดปุ่มด้านล่างเพื่ออนุญาตให้เข้าถึงกล้องมือถือ</p>
+    <p>กดปุ่มด้านล่างเพื่อเปิดกล้องส่อง Hiro Marker</p>
     <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
   </div>
 
-  <!-- UI ปุ่มเพิ่มวัตถุ -->
+  <!-- ปุ่ม GUI ควบคุม -->
   <div id="ui-container">
     <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
     <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
   </div>
 
-  <!-- แถบแนวนอนล่าง: ปรับขนาด + สลับโหมดโต้ตอบ -->
+  <!-- แถบปรับขนาดแนวนอน + สลับโหมด -->
   <div id="bottom-panel">
     <div class="slider-group">
       <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
@@ -167,16 +165,15 @@
     </div>
   </div>
 
-  <!-- A-Frame Scene
-       บังคับให้เปิดใช้งานกล้องวิดีโอผ่าน sourceType: webcam อย่างถูกต้อง -->
+  <!-- A-Frame Scene -->
   <a-scene 
     embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; videoTexture: true;"
-    renderer="logarithmicDepthBuffer: true; colorManagement: true; antialias: true;"
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    renderer="logarithmicDepthBuffer: true; colorManagement: true;"
     cursor="rayOrigin: mouse"
     raycaster="objects: .clickable">
 
-    <!-- Preload Assets -->
+    <!-- Preload Assets (ตรวจสอบชื่อไฟล์ Banana.glb และ kitchen.glb ให้ตรงกัน) -->
     <a-assets>
       <a-asset-item id="banana-model" src="Banana.glb"></a-asset-item>
       <a-asset-item id="kitchen-model" src="kitchen.glb"></a-asset-item>
@@ -186,22 +183,26 @@
     <a-entity camera id="main-camera"></a-entity>
 
     <!-- Light -->
-    <a-entity light="type: ambient; intensity: 0.9;"></a-entity>
-    <a-entity light="type: directional; intensity: 0.6;" position="1 4 2"></a-entity>
+    <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8;" position="1 4 2"></a-entity>
 
-    <!-- Hiro Marker -->
+    <!-- ========================================================== -->
+    <!-- HIRO MARKER TRACKING (โมเดล Banana จะแสดงตรงนี้เมื่อส่องเจอ Marker) -->
+    <!-- ========================================================== -->
     <a-marker preset="hiro" id="hiro-marker">
+      <!-- โมเดลตั้งต้นแสดงบน Marker -->
       <a-entity 
-        id="marker-banana"
+        id="marker-model-banana"
         gltf-model="#banana-model" 
         scale="0.2 0.2 0.2" 
         position="0 0 0"
+        rotation="0 0 0"
         class="clickable"
         ar-touch-controls>
       </a-entity>
     </a-marker>
 
-    <!-- Container สำหรับ Free Placement -->
+    <!-- Container สำหรับโมเดลที่กดปุ่มเพิ่มแบบ Free Placement -->
     <a-entity id="world-container" position="0 0 -2"></a-entity>
 
   </a-scene>
@@ -211,23 +212,20 @@
     let currentDragMode = 'move';
 
     // -------------------------------------------------------------
-    // 1. ระบบกระตุ้นเปิดวิดีโอกล้อง (Camera Trigger Fix)
+    // 1. ระบบกระตุ้นกล้องวิดีโอ (Camera Activation)
     // -------------------------------------------------------------
     document.getElementById('start-btn').addEventListener('click', function() {
-      // ซ่อนหน้าต่าง Overlay
       document.getElementById('start-overlay').style.display = 'none';
 
-      // ค้นหาวิดีโอที่ AR.js สร้างขึ้นในระบบแล้วสั่ง Play เพื่อป้องกันการบล็อก Autoplay บน iOS/Android
-      const arVideo = document.querySelector('video');
-      if (arVideo) {
-        arVideo.play().catch(function(err) {
-          console.log("Video play triggered:", err);
-        });
+      // สั่งเปิดวิดีโอกล้องของ AR.js
+      const video = document.querySelector('video');
+      if (video) {
+        video.play();
       }
     });
 
     // -------------------------------------------------------------
-    // 2. Component สำหรับ ย้ายตำแหน่ง / หมุนอิสระ / Pinch-to-Zoom
+    // 2. Component สำหรับ ย้ายตำแหน่ง / หมุนอิสระ / Pinch Scale
     // -------------------------------------------------------------
     AFRAME.registerComponent('ar-touch-controls', {
       init: function () {
@@ -238,6 +236,9 @@
         this.baseRotation = { x: 0, y: 0, z: 0 };
         this.previousTouchPos = { x: 0, y: 0 };
         this.camera = document.querySelector('#main-camera').object3D;
+
+        // สั่งตั้งค่าให้โมเดลนี้เป็นตัวที่ถูกเลือกทันทีที่สร้างหรือสัมผัส
+        activeSelectedObject = this.el;
 
         window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
         window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
@@ -284,12 +285,14 @@
         } else if (evt.touches.length === 2 && this.initialPinchDistance && activeSelectedObject === this.el) {
           evt.preventDefault();
           
+          // Pinch Zoom
           let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
           let scaleFactor = currentDistance / this.initialPinchDistance;
           let newScale = Math.max(0.02, Math.min(2.0, this.baseScale.x * scaleFactor));
           this.el.object3D.scale.set(newScale, newScale, newScale);
           updateSliderValue(newScale);
 
+          // Rotate 2 นิ้ว
           let currentAngle = this.getAngle(evt.touches[0], evt.touches[1]);
           let angleDelta = currentAngle - this.initialAngle;
           this.el.object3D.rotation.y = this.baseRotation.y + (angleDelta * Math.PI / 180);
