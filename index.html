@@ -5,20 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR 3D Interactive Model Viewer</title>
 
-  <!-- A-Frame Library -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <!-- AR.js for A-Frame (Marker / Image Tracking) -->
+  <!-- A-Frame Version 1.2.0 (รุ่นที่ทำงานเสถียรที่สุดร่วมกับ AR.js) -->
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <!-- AR.js สำหรับ A-Frame -->
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: sans-serif;
       user-select: none;
     }
 
-    /* UI Overlay Control Panel */
+    /* หน้าต่างปุ่มขอสิทธิ์เปิดกล้องแบบแมนนวล เผื่อบราวเซอร์บล็อก */
+    #start-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    /* UI ควบคุม */
     #ui-container {
       position: absolute;
       top: 15px;
@@ -37,17 +55,19 @@
       background: #4CAF50;
       color: white;
       border: none;
-      padding: 8px 16px;
+      padding: 10px 18px;
       font-size: 14px;
       font-weight: bold;
       border-radius: 20px;
       cursor: pointer;
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-      transition: all 0.2s ease;
     }
 
-    .btn:active {
-      transform: scale(0.95);
+    .btn-main {
+      background: #e91e63;
+      font-size: 18px;
+      padding: 15px 30px;
+      border-radius: 30px;
     }
 
     .btn-secondary {
@@ -74,6 +94,13 @@
 </head>
 <body>
 
+  <!-- Overlay สำหรับเปิดใช้งานกล้อง -->
+  <div id="start-overlay">
+    <h2>แอพพลิเคชัน AR 3D Viewer</h2>
+    <p>กดปุ่มด้านล่างเพื่ออนุญาตให้ใช้งานกล้องมือถือ</p>
+    <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
+  </div>
+
   <!-- Controls GUI -->
   <div id="ui-container">
     <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
@@ -81,62 +108,78 @@
   </div>
 
   <div id="info-text">
-    ส่องกล้องไปที่ Marker/QR หรือแตะลากวัตถุบนหน้าจอเพื่อเคลื่อนย้าย
+    ส่องกล้องไปที่ Hiro Marker หรือแตะลากวัตถุบนหน้าจอ
   </div>
 
-  <!-- A-Frame Scene -->
-  <!-- webxr: enables AR features for mobile surface detection; arjs: handles Hiro/QR Markers -->
+  <!-- A-Frame Scene
+        arjs="sourceType: webcam" ตัวนี้ทำหน้าที่เปิดกล้องมือถือให้อัตโนมัติ -->
   <a-scene 
     embedded 
-    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-    webxr="optionalFeatures: hit-test, local-floor;"
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; trackingMethod: best; facingMode: environment;"
     renderer="logarithmicDepthBuffer: true; colorManagement: true;"
     cursor="rayOrigin: mouse"
     raycaster="objects: .clickable">
 
-    <!-- Preload 3D Assets -->
+    <!-- Assets Preload -->
     <a-assets>
-      <!-- เปลี่ยน path ไฟล์ GLB ของคุณที่นี่ -->
       <a-asset-item id="banana-model" src="Banana.glb"></a-asset-item>
       <a-asset-item id="kitchen-model" src="kitchen.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Camera / Cursor Setup -->
-    <a-entity camera look-controlsWASD-controls id="main-camera">
-      <!-- Raycaster component for touch/click interaction -->
-      <a-entity cursor="fuse: false"
-                position="0 0 -1"
-                geometry="primitive: ring; radiusInner: 0.01; radiusOuter: 0.015"
-                material="color: #FF5722; shader: flat"
-                visible="false">
-      </a-entity>
-    </a-entity>
+    <!-- Camera -->
+    <a-entity camera look-controls id="main-camera"></a-entity>
 
-    <!-- Lighting -->
-    <a-entity light="type: ambient; intensity: 0.8;"></a-entity>
+    <!-- Light -->
+    <a-entity light="type: ambient; intensity: 0.9;"></a-entity>
     <a-entity light="type: directional; intensity: 0.6;" position="1 4 2"></a-entity>
 
-    <!-- SECTION 1: Image / Marker Tracking (Hiro / Custom Pattern / QR) -->
+    <!-- Marker Tracking (ส่องรูป Hiro Marker) -->
     <a-marker preset="hiro" id="hiro-marker">
-      <!-- Model จะปรากฏขึ้นเมื่อส่องเจอ Hiro Marker -->
       <a-entity 
         id="marker-banana"
         gltf-model="#banana-model" 
         scale="0.2 0.2 0.2" 
         position="0 0 0"
         class="clickable"
-        gesture-handler>
+        drag-and-drop>
       </a-entity>
     </a-marker>
 
-    <!-- SECTION 2: Dynamic Spawn Area for Surface / Free Placement -->
+    <!-- Container สำหรับโหมดวางวัตถุบนหน้าจอ / พื้น -->
     <a-entity id="world-container" position="0 0 -2"></a-entity>
 
   </a-scene>
 
-  <!-- JavaScript Interaction Logic -->
   <script>
-    // System Component for Touch / Drag & Drop Interaction
+    // -------------------------------------------------------------
+    // 1. ระบบจัดการ Permission การเปิดกล้องบนสมาร์ทโฟน
+    // -------------------------------------------------------------
+    document.getElementById('start-btn').addEventListener('click', async () => {
+      try {
+        // ขอสิทธิ์ใช้กล้องหลังจากกดปุ่ม
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: { exact: "environment" } } 
+        });
+        
+        // หากได้รับสิทธิ์ ให้ซ่อน Overlay และให้ AR.js ทำงานต่อ
+        document.getElementById('start-overlay').style.display = 'none';
+        
+        // หยุด Stream ชั่วคราวเพื่อให้ AR.js จัดการต่อเอง
+        stream.getTracks().forEach(track => track.stop());
+      } catch (err) {
+        // กรณีอุปกรณ์ไม่มีกล้องหลัง (เช่น ในคอมพิวเตอร์) ให้ลองขอใช้กล้องทั่วไป
+        try {
+          await navigator.mediaDevices.getUserMedia({ video: true });
+          document.getElementById('start-overlay').style.display = 'none';
+        } catch (e) {
+          alert("ไม่สามารถเข้าถึงกล้องได้ โปรดตรวจสอบการอนุญาตใช้งานกล้องในตั้งค่าบราวเซอร์");
+        }
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 2. ระบบ Drag and Drop เคลื่อนย้ายวัตถุบนหน้าจอ
+    // -------------------------------------------------------------
     AFRAME.registerComponent('drag-and-drop', {
       init: function () {
         this.el.addEventListener('mousedown', this.onDragStart.bind(this));
@@ -154,13 +197,11 @@
 
       onDragStart: function (evt) {
         this.isDragging = true;
-        this.el.setAttribute('scale', this.getScaledUpValue());
       },
 
       onDragMove: function (evt) {
         if (!this.isDragging) return;
 
-        // คำนวณตำแหน่งพิกัดจากหน้าจอสัมผัสไปยัง AR 3D Space
         let clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
         let clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
 
@@ -172,8 +213,7 @@
         let raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, this.camera);
 
-        // คำนวณระนาบการวางวัตถุบนพื้นระดับ Y = -1
-        let plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1);
+        let plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 2);
         let targetPos = new THREE.Vector3();
         
         if (raycaster.ray.intersectPlane(plane, targetPos)) {
@@ -182,49 +222,31 @@
       },
 
       onDragEnd: function (evt) {
-        if (this.isDragging) {
-          this.isDragging = false;
-          this.el.setAttribute('scale', this.getOriginalValue());
-        }
-      },
-
-      getScaledUpValue: function() {
-        let currentScale = this.el.getAttribute('scale');
-        return `${currentScale.x * 1.1} ${currentScale.y * 1.1} ${currentScale.z * 1.1}`;
-      },
-
-      getOriginalValue: function() {
-        let currentScale = this.el.getAttribute('scale');
-        return `${currentScale.x / 1.1} ${currentScale.y / 1.1} ${currentScale.z / 1.1}`;
+        this.isDragging = false;
       }
     });
 
-    // ฟังก์ชันเพิ่มโมเดลสามมิติลงในฉาก (Dynamic Spawning)
+    // -------------------------------------------------------------
+    // 3. ฟังก์ชันเพิ่มโมเดลสามมิติแบบ Dynamic
+    // -------------------------------------------------------------
     function spawnModel(type) {
       const container = document.querySelector('#world-container');
       const newEntity = document.createElement('a-entity');
 
-      // กำหนดค่าเริ่มต้นตามประเภทโมเดล
       if (type === 'banana') {
         newEntity.setAttribute('gltf-model', '#banana-model');
-        newEntity.setAttribute('scale', '0.3 0.3 0.3');
+        newEntity.setAttribute('scale', '0.2 0.2 0.2');
       } else if (type === 'kitchen') {
         newEntity.setAttribute('gltf-model', '#kitchen-model');
-        newEntity.setAttribute('scale', '0.1 0.1 0.1');
+        newEntity.setAttribute('scale', '0.08 0.08 0.08');
       }
 
-      // สุ่มตำแหน่งเล็กน้อยทางด้านหน้าผู้ใช้
-      const randomX = (Math.random() - 0.5) * 1.5;
-      const randomZ = -1.5 + (Math.random() - 0.5) * 0.5;
+      const randomX = (Math.random() - 0.5) * 1.2;
+      const randomY = (Math.random() - 0.5) * 0.8;
       
-      newEntity.setAttribute('position', `${randomX} -0.5 ${randomZ}`);
+      newEntity.setAttribute('position', `${randomX} ${randomY} -1.5`);
       newEntity.setAttribute('class', 'clickable');
-      
-      // ติดตั้งระบบ Drag and Drop ให้โมเดล
       newEntity.setAttribute('drag-and-drop', '');
-
-      // เพิ่ม Effect หมุนแบบ Gaming
-      newEntity.setAttribute('animation', 'property: rotation; to: 0 360 0; loop: true; dur: 10000; easing: linear');
 
       container.appendChild(newEntity);
     }
