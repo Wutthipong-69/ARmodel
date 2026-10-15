@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AR 3D Interactive Model Viewer</title>
 
   <!-- A-Frame Version 1.2.0 -->
@@ -11,12 +11,16 @@
   <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
   <style>
+    * {
+      touch-action: none; /* บล็อก Gesture พื้นฐานของ Browser ไม่ให้กวน AR Controls */
+    }
+
     body {
       margin: 0;
       overflow: hidden;
       font-family: sans-serif;
       user-select: none;
-      touch-action: none; /* ป้องกันการ Scroll หน้าจอ Browser บนมือถือ */
+      -webkit-user-select: none;
     }
 
     #start-overlay {
@@ -36,6 +40,7 @@
       padding: 20px;
     }
 
+    /* UI ด้านบน: ปุ่มเพิ่มวัตถุ */
     #ui-container {
       position: absolute;
       top: 15px;
@@ -74,21 +79,35 @@
       background: #2196F3;
     }
 
-    #info-text {
+    /* UI ด้านล่าง: แถบแนวนอนสำหรับปรับขนาด (Slider Bar) */
+    #scale-slider-container {
       position: absolute;
-      bottom: 20px;
+      bottom: 25px;
       left: 50%;
       transform: translateX(-50%);
       z-index: 1000;
+      width: 80%;
+      max-width: 320px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 12px 20px;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      backdrop-filter: blur(5px);
+    }
+
+    #scale-slider-container label {
       color: white;
-      background: rgba(0,0,0,0.7);
-      padding: 8px 18px;
-      border-radius: 15px;
-      font-size: 12px;
-      text-align: center;
-      pointer-events: none;
-      width: 85%;
-      max-width: 380px;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    #scale-slider {
+      width: 100%;
+      accent-color: #FF9800;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -101,15 +120,16 @@
     <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
   </div>
 
-  <!-- UI Controls -->
+  <!-- UI ปุ่มเพิ่มวัตถุ -->
   <div id="ui-container">
     <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
     <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
   </div>
 
-  <div id="info-text">
-    👆 ลาก 1 นิ้วเพื่อย้ายวัตถุ (ขึ้น/ลง/ซ้าย/ขวา)<br>
-    🤌 ถ่าง/หนีบ 2 นิ้วเพื่อย่อ-ขยายโมเดล
+  <!-- แถบแนวนอนปรับขนาดวัตถุ (Slider Control) -->
+  <div id="scale-slider-container">
+    <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
+    <input type="range" id="scale-slider" min="0.05" max="1.5" step="0.02" value="0.2">
   </div>
 
   <!-- A-Frame Scene -->
@@ -120,20 +140,20 @@
     cursor="rayOrigin: mouse"
     raycaster="objects: .clickable">
 
-    <!-- Assets Preload -->
+    <!-- Preload Assets -->
     <a-assets>
       <a-asset-item id="banana-model" src="Banana.glb"></a-asset-item>
       <a-asset-item id="kitchen-model" src="kitchen.glb"></a-asset-item>
     </a-assets>
 
     <!-- Camera -->
-    <a-entity camera look-controls="enabled: false" id="main-camera"></a-entity>
+    <a-entity camera id="main-camera"></a-entity>
 
     <!-- Light -->
     <a-entity light="type: ambient; intensity: 0.9;"></a-entity>
     <a-entity light="type: directional; intensity: 0.6;" position="1 4 2"></a-entity>
 
-    <!-- Hiro Marker Tracking -->
+    <!-- Hiro Marker -->
     <a-marker preset="hiro" id="hiro-marker">
       <a-entity 
         id="marker-banana"
@@ -151,8 +171,11 @@
   </a-scene>
 
   <script>
+    // ตัวแปรเก็บวัตถุสามมิติตัวล่าสุดที่ผู้ใช้กดเลือก/ใช้งานอยู่
+    let activeSelectedObject = null;
+
     // -------------------------------------------------------------
-    // 1. ระบบจัดการ Permission การใช้กล้อง
+    // 1. ระบบจัดการ Permission กล้อง
     // -------------------------------------------------------------
     document.getElementById('start-btn').addEventListener('click', function() {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -161,7 +184,7 @@
           stream.getTracks().forEach(track => track.stop());
           document.getElementById('start-overlay').style.display = 'none';
         })
-        .catch(function(err) {
+        .catch(function() {
           document.getElementById('start-overlay').style.display = 'none';
         });
       } else {
@@ -170,94 +193,60 @@
     });
 
     // -------------------------------------------------------------
-    // 2. Component รองรับการลากแนวดิ่ง/แนวนอน + ย่อ-ขยายด้วย 2 นิ้ว
+    // 2. Component สำหรับลากเคลื่อนที่ 3D (แนวดิ่ง/แนวนอน) และ Pinch-to-Zoom
     // -------------------------------------------------------------
     AFRAME.registerComponent('ar-touch-controls', {
       init: function () {
         this.isDragging = false;
         this.initialPinchDistance = null;
-        this.initialScale = { x: 1, y: 1, z: 1 };
+        this.baseScale = { x: 0.2, y: 0.2, z: 0.2 };
         this.camera = document.querySelector('#main-camera').object3D;
 
-        // Event Listeners สำหรับการสัมผัสหน้าจอ
-        this.el.addEventListener('mousedown', this.onDragStart.bind(this));
-        this.el.addEventListener('touchstart', this.onTouchStart.bind(this));
-        
-        window.addEventListener('mousemove', this.onDragMove.bind(this));
-        window.addEventListener('touchmove', this.onTouchMove.bind(this));
-
-        window.addEventListener('mouseup', this.onDragEnd.bind(this));
+        // ผูก Event Listeners การสัมผัสเข้ากับ Window โดยตรงเพื่อความแม่นยำเวลาลากหลุดวัตถุ
+        window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+        window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
         window.addEventListener('touchend', this.onTouchEnd.bind(this));
+
+        // สำหรับการทดสอบด้วย Mouse ในคอมพิวเตอร์
+        this.el.addEventListener('mousedown', this.onMouseDown.bind(this));
+        window.addEventListener('mousemove', this.onMouseMove.bind(this));
+        window.addEventListener('mouseup', this.onMouseUp.bind(this));
       },
 
-      // เริ่มจับการสัมผัสแบบ Touch
+      // เริ่มแตะหน้าจอ
       onTouchStart: function (evt) {
         if (evt.touches.length === 1) {
-          // 1 นิ้ว: ลากย้ายตำแหน่ง
-          this.isDragging = true;
-        } else if (evt.touches.length === 2) {
-          // 2 นิ้ว: เริ่มย่อ-ขยาย (Pinch)
+          // ตรวจสอบว่าใช้นิ้วแตะโดนโมเดลนี้หรือไม่
+          if (this.checkIntersection(evt.touches[0])) {
+            this.isDragging = true;
+            activeSelectedObject = this.el; // ตั้งค่าเป็นวัตถุหลักที่ถูกเลือก
+            updateSliderValue(this.el.object3D.scale.x);
+          }
+        } else if (evt.touches.length === 2 && activeSelectedObject === this.el) {
+          // 2 นิ้ว: โหมด Pinch-to-Zoom
           this.isDragging = false;
           this.initialPinchDistance = this.getDistance(evt.touches[0], evt.touches[1]);
-          this.initialScale = Object.assign({}, this.el.object3D.scale);
+          this.baseScale = Object.assign({}, this.el.object3D.scale);
         }
       },
 
-      onDragStart: function (evt) {
-        this.isDragging = true;
-      },
-
-      // ควบคุมการย้ายตำแหน่ง (ลากได้ทั้งแนวดิ่ง Y และแนวนอน X/Z)
+      // ลากนิ้ว
       onTouchMove: function (evt) {
         if (evt.touches.length === 1 && this.isDragging) {
+          evt.preventDefault(); // บล็อกการ Scroll หน้าจอ
           this.moveObject(evt.touches[0].clientX, evt.touches[0].clientY);
-        } else if (evt.touches.length === 2 && this.initialPinchDistance) {
-          // คำนวณระยะห่างระหว่าง 2 นิ้วเพื่อย่อ-ขยาย
+        } else if (evt.touches.length === 2 && this.initialPinchDistance && activeSelectedObject === this.el) {
+          evt.preventDefault(); // บล็อก Zoom หน้าเว็บของ Browser
+          
           let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
           let factor = currentDistance / this.initialPinchDistance;
 
-          let newScale = {
-            x: Math.max(0.01, this.initialScale.x * factor),
-            y: Math.max(0.01, this.initialScale.y * factor),
-            z: Math.max(0.01, this.initialScale.z * factor)
-          };
-
-          this.el.object3D.scale.set(newScale.x, newScale.y, newScale.z);
-        }
-      },
-
-      onDragMove: function (evt) {
-        if (this.isDragging) {
-          this.moveObject(evt.clientX, evt.clientY);
-        }
-      },
-
-      // ฟังก์ชันคำนวณตำแหน่งวัตถุใน 3D space รองรับทั้งแนวตั้งและแนวนอน
-      moveObject: function (clientX, clientY) {
-        let mouse = new THREE.Vector2(
-          (clientX / window.innerWidth) * 2 - 1,
-          -(clientY / window.innerHeight) * 2 + 1
-        );
-
-        let raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse, this.camera);
-
-        // สร้าง Plane เสมือนขนานกับกล้อง เพื่อให้ลากวัตถุ ขึ้น-ลง-ซ้าย-ขวา ได้อย่างเป็นธรรมชาติ
-        let targetDistance = 2; // ระยะห่างจากกล้อง
-        let cameraPlane = new THREE.Plane();
-        let cameraDir = new THREE.Vector3();
-        
-        this.camera.getWorldDirection(cameraDir);
-        let planePoint = this.camera.position.clone().add(cameraDir.multiplyScalar(targetDistance));
-        cameraPlane.setFromNormalAndCoplanarPoint(cameraDir, planePoint);
-
-        let targetPos = new THREE.Vector3();
-        if (raycaster.ray.intersectPlane(cameraPlane, targetPos)) {
-          // หากโมเดลอยู่ภายใต้ Parent (เช่น Marker) ให้แปลงพิกัด World เป็น Local
-          if (this.el.parentNode && this.el.parentNode.object3D) {
-            this.el.parentNode.object3D.worldToLocal(targetPos);
-          }
-          this.el.object3D.position.copy(targetPos);
+          // คำนวณ Scale ใหม่
+          let newScale = Math.max(0.02, Math.min(2.0, this.baseScale.x * factor));
+          this.el.object3D.scale.set(newScale, newScale, newScale);
+          
+          // อัปเดตแถบ Slider ให้ขยับตามนิ้วถ่าง
+          updateSliderValue(newScale);
         }
       },
 
@@ -270,43 +259,113 @@
         }
       },
 
-      onDragEnd: function () {
+      // ฟังก์ชันสำหรับ Mouse (สำหรับ Desktop Test)
+      onMouseDown: function (evt) {
+        this.isDragging = true;
+        activeSelectedObject = this.el;
+        updateSliderValue(this.el.object3D.scale.x);
+      },
+      onMouseMove: function (evt) {
+        if (this.isDragging) {
+          this.moveObject(evt.clientX, evt.clientY);
+        }
+      },
+      onMouseUp: function () {
         this.isDragging = false;
       },
 
-      // ฟังก์ชันคำนวณระยะห่างระหว่างจุดสัมผัส 2 จุด
-      getDistance: function (touch1, touch2) {
-        let dx = touch1.clientX - touch2.clientX;
-        let dy = touch1.clientY - touch2.clientY;
+      // ตรวจสอบว่า Raycaster ส่องโดนตัววัตถุหรือไม่
+      checkIntersection: function (touch) {
+        let mouse = new THREE.Vector2(
+          (touch.clientX / window.innerWidth) * 2 - 1,
+          -(touch.clientY / window.innerHeight) * 2 + 1
+        );
+        let raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+        let intersects = raycaster.intersectObject(this.el.object3D, true);
+        return intersects.length > 0;
+      },
+
+      // คำนวณตำแหน่ง 3D Space ให้เคลื่อนที่ตามนิ้ว (ทั้งแนวดิ่ง Y และแนวนอน X/Z)
+      moveObject: function (clientX, clientY) {
+        let mouse = new THREE.Vector2(
+          (clientX / window.innerWidth) * 2 - 1,
+          -(clientY / window.innerHeight) * 2 + 1
+        );
+
+        let raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+
+        // สร้าง Plane เสมือนขึ้นมารองรับการลากในระนาบกล้อง
+        let cameraDir = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDir);
+        
+        let planePoint = this.camera.position.clone().add(cameraDir.multiplyScalar(2));
+        let cameraPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+
+        let targetPos = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(cameraPlane, targetPos)) {
+          if (this.el.parentNode && this.el.parentNode.object3D) {
+            this.el.parentNode.object3D.worldToLocal(targetPos);
+          }
+          this.el.object3D.position.copy(targetPos);
+        }
+      },
+
+      // ระยะห่างระหว่างนิ้ว 2 นิ้ว
+      getDistance: function (t1, t2) {
+        let dx = t1.clientX - t2.clientX;
+        let dy = t1.clientY - t2.clientY;
         return Math.sqrt(dx * dx + dy * dy);
       }
     });
 
     // -------------------------------------------------------------
-    // 3. ฟังก์ชันเพิ่มโมเดลสามมิติแบบ Dynamic
+    // 3. ควบคุม Slider แถบแนวนอนสำหรับปรับขนาด
+    // -------------------------------------------------------------
+    const slider = document.getElementById('scale-slider');
+    
+    slider.addEventListener('input', function() {
+      if (activeSelectedObject) {
+        let val = parseFloat(this.value);
+        activeSelectedObject.object3D.scale.set(val, val, val);
+      }
+    });
+
+    function updateSliderValue(val) {
+      slider.value = val;
+    }
+
+    // -------------------------------------------------------------
+    // 4. ฟังก์ชันสร้างวัตถุใหม่ (Spawn Model)
     // -------------------------------------------------------------
     function spawnModel(type) {
       const container = document.querySelector('#world-container');
       const newEntity = document.createElement('a-entity');
 
+      let initialScale = 0.2;
       if (type === 'banana') {
         newEntity.setAttribute('gltf-model', '#banana-model');
-        newEntity.setAttribute('scale', '0.2 0.2 0.2');
+        initialScale = 0.2;
       } else if (type === 'kitchen') {
         newEntity.setAttribute('gltf-model', '#kitchen-model');
-        newEntity.setAttribute('scale', '0.08 0.08 0.08');
+        initialScale = 0.08;
       }
 
-      const randomX = (Math.random() - 0.5) * 1.0;
+      newEntity.setAttribute('scale', `${initialScale} ${initialScale} ${initialScale}`);
+      
+      const randomX = (Math.random() - 0.5) * 0.8;
       const randomY = (Math.random() - 0.5) * 0.6;
       
       newEntity.setAttribute('position', `${randomX} ${randomY} -1.5`);
       newEntity.setAttribute('class', 'clickable');
-      
-      // ติดตั้ง Component ควบคุมสัมผัส ลากแนวดิ่ง และ Pinch Scale
       newEntity.setAttribute('ar-touch-controls', '');
 
       container.appendChild(newEntity);
+
+      // ตั้งค่าโมเดลใหม่ที่สร้างเป็น Active Object ทันที
+      activeSelectedObject = newEntity;
+      updateSliderValue(initialScale);
     }
   </script>
 </body>
