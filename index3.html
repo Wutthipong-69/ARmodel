@@ -41,9 +41,7 @@
       padding: 20px;
     }
 
-    /* -------------------------------------------------------------
-       ปรับแต่ง Sidebar ด้านข้างสำหรับเก็บแผงควบคุม UI ทั้งหมด
-    ------------------------------------------------------------- */
+    /* Sidebar ด้านข้างสำหรับเก็บแผงควบคุม UI */
     #sidebar {
       position: fixed;
       top: 0;
@@ -54,7 +52,7 @@
       background: rgba(0, 0, 0, 0.85);
       backdrop-filter: blur(8px);
       z-index: 1000;
-      transform: translateX(-100%); /* ซ่อนไว้ทางซ้ายโดยเริ่มต้น */
+      transform: translateX(-100%);
       transition: transform 0.3s ease-in-out;
       display: flex;
       flex-direction: column;
@@ -66,10 +64,10 @@
     }
 
     #sidebar.active {
-      transform: translateX(0); /* ขยายออกมาเมื่อมี class 'active' */
+      transform: translateX(0);
     }
 
-    /* ปุ่มสำหรับสลับซ่อน/แสดง Sidebar */
+    /* ปุ่มสลับซ่อน/แสดง Sidebar */
     #sidebar-toggle-btn {
       position: fixed;
       top: 15px;
@@ -123,7 +121,6 @@
       background: #2196F3;
     }
 
-    /* สไตล์ปุ่มลบโมเดล */
     .btn-delete {
       background: #f44336;
     }
@@ -177,7 +174,6 @@
       font-size: 11px;
     }
 
-    /* สไตล์สำหรับปุ่มควบคุมทิศทาง (D-Pad) */
     .dpad-container {
       display: flex;
       flex-direction: column;
@@ -231,10 +227,10 @@
     <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
   </div>
 
-  <!-- ปุ่มไอคอนเปิด/ปิด Sidebar แผงควบคุมด้านข้าง -->
+  <!-- ปุ่มไอคอนเปิด/ปิด Sidebar -->
   <button id="sidebar-toggle-btn" onclick="toggleSidebar()">⚙️</button>
 
-  <!-- Sidebar สำหรับเก็บคอนโทรลเลอร์ควบคุมทั้งหมด -->
+  <!-- Sidebar สำหรับเก็บแผงควบคุม -->
   <div id="sidebar">
     <h3 style="margin: 0 0 10px 0; text-align: center;">⚙️ แผงควบคุม</h3>
 
@@ -242,13 +238,12 @@
     <div id="ui-container">
       <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
       <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
-      <!-- ปุ่มสำหรับลบโมเดลล่าสุด -->
       <button class="btn btn-delete" onclick="removeLastModel()">🗑️ ลบโมเดลล่าสุด</button>
     </div>
 
     <hr>
 
-    <!-- แผงปรับขนาด + สลับโหมด + ปุ่มลูกศรควบคุมทิศทาง -->
+    <!-- แผงปรับขนาด + สลับโหมด + ปุ่มควบคุมทิศทาง -->
     <div id="bottom-panel">
       <div class="slider-group">
         <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
@@ -260,7 +255,7 @@
         <button class="btn btn-mode" id="mode-btn" onclick="toggleDragMode()">✋ เคลื่อนย้าย (Move)</button>
       </div>
 
-      <!-- แผงปุ่มลูกศรควบคุมเคลื่อนย้าย (ขึ้น-ลง-ซ้าย-ขวา) -->
+      <!-- แผงปุ่ม D-Pad -->
       <div class="dpad-container">
         <div class="dpad-row">
           <button class="btn-dpad" onclick="moveActiveObject('up')">⬆️</button>
@@ -307,7 +302,7 @@
   <script>
     let activeSelectedObject = null;
     let currentDragMode = 'move';
-    let spawnedModels = []; // อาเรย์สำหรับเก็บอ้างอิงโมเดลที่สร้างขึ้นมาใหม่
+    let spawnedModels = [];
 
     // -------------------------------------------------------------
     // ฟังก์ชัน ซ่อน/แสดง แผงควบคุม Sidebar
@@ -334,19 +329,20 @@
         video.play();
       }
       
-      // สร้างโมเดลเริ่มต้นเมื่อผู้ใช้กดเริ่มกล้อง
       if (spawnedModels.length === 0) {
         spawnModel('banana');
       }
     });
 
     // -------------------------------------------------------------
-    // 2. Component ควบคุมสัมผัส (ปรับปรุงระบบTouch ให้เคลื่อนย้ายเสถียร)
+    // 2. Component ควบคุมสัมผัส (รองรับ 1 นิ้วลาก/หมุน และ 2 นิ้ว Pinch Zoom)
     // -------------------------------------------------------------
     AFRAME.registerComponent('ar-touch-controls', {
       init: function () {
         this.isDragging = false;
         this.previousTouchPos = { x: 0, y: 0 };
+        this.initialPinchDistance = null;
+        this.baseScale = { x: 0.2, y: 0.2, z: 0.2 };
 
         activeSelectedObject = this.el;
 
@@ -360,16 +356,21 @@
       },
 
       onTouchStart: function (evt) {
-        // หากผู้ใช้สัมผัสส่วนเมนู Sidebar หรือปุ่มเปิดปิด ให้ไม่เริ่มลากโมเดล
         if (evt.target.closest('#sidebar') || evt.target.closest('#sidebar-toggle-btn')) {
           return;
         }
 
         if (evt.touches.length === 1) {
+          // สัมผัส 1 นิ้ว (ลาก/หมุน)
           this.isDragging = true;
           activeSelectedObject = this.el;
           this.previousTouchPos = { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
           updateSliderValue(this.el.object3D.scale.x);
+        } else if (evt.touches.length === 2 && activeSelectedObject === this.el) {
+          // สัมผัส 2 นิ้ว (Pinch Zoom ย่อ-ขยาย)
+          this.isDragging = false;
+          this.initialPinchDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          this.baseScale = Object.assign({}, this.el.object3D.scale);
         }
       },
 
@@ -381,20 +382,30 @@
           let deltaY = touch.clientY - this.previousTouchPos.y;
           
           if (currentDragMode === 'move') {
-            // คำนวณเคลื่อนย้ายตำแหน่งพิกัด X และ Y โดยตรง
             this.el.object3D.position.x += deltaX * 0.005;
             this.el.object3D.position.y -= deltaY * 0.005;
           } else if (currentDragMode === 'rotate') {
-            // หมุนโมเดล
             this.el.object3D.rotation.y += deltaX * 0.015;
             this.el.object3D.rotation.x += deltaY * 0.015;
           }
 
           this.previousTouchPos = { x: touch.clientX, y: touch.clientY };
+        } else if (evt.touches.length === 2 && this.initialPinchDistance && activeSelectedObject === this.el) {
+          // คำนวณการย่อ-ขยายจากระยะถ่างของ 2 นิ้ว
+          evt.preventDefault();
+          let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          let scaleFactor = currentDistance / this.initialPinchDistance;
+          let newScale = Math.max(0.02, Math.min(2.0, this.baseScale.x * scaleFactor));
+          
+          this.el.object3D.scale.set(newScale, newScale, newScale);
+          updateSliderValue(newScale);
         }
       },
 
       onTouchEnd: function (evt) {
+        if (evt.touches.length < 2) {
+          this.initialPinchDistance = null;
+        }
         if (evt.touches.length === 0) {
           this.isDragging = false;
         }
@@ -428,6 +439,12 @@
 
       onMouseUp: function () {
         this.isDragging = false;
+      },
+
+      getDistance: function (t1, t2) {
+        let dx = t1.clientX - t2.clientX;
+        let dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
       }
     });
 
@@ -490,7 +507,6 @@
 
       container.appendChild(newEntity);
 
-      // บันทึกตัวแปรโมเดลลงใน Array
       spawnedModels.push(newEntity);
 
       activeSelectedObject = newEntity;
@@ -520,7 +536,7 @@
     function moveActiveObject(direction) {
       if (!activeSelectedObject) return;
 
-      const step = 0.08; // ระยะการขยับต่อการกด 1 ครั้ง
+      const step = 0.08;
       const pos = activeSelectedObject.object3D.position;
 
       switch(direction) {
