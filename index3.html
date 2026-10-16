@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AR 3D Interactive Model Viewer</title>
+
+  <!-- A-Frame Version 1.2.0 -->
+  <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+  <!-- AR.js for A-Frame -->
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+
+  <style>
+    * {
+      touch-action: none;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #000;
+    }
+
+    #start-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 99999;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+
+    #ui-container {
+      position: absolute;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      display: flex;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      padding: 10px 15px;
+      border-radius: 25px;
+      backdrop-filter: blur(5px);
+    }
+
+    .btn {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 20px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+
+    .btn-main {
+      background: #e91e63;
+      font-size: 18px;
+      padding: 15px 30px;
+      border-radius: 30px;
+      margin-top: 15px;
+    }
+
+    .btn-secondary {
+      background: #2196F3;
+    }
+
+    /* สไตล์ปุ่มลบโมเดล */
+    .btn-delete {
+      background: #f44336;
+    }
+
+    .btn-mode {
+      background: #9c27b0;
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 12px;
+    }
+
+    #bottom-panel {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      width: 85%;
+      max-width: 360px;
+      background: rgba(0, 0, 0, 0.75);
+      padding: 12px 18px;
+      border-radius: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(5px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+
+    .slider-group {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .slider-group label {
+      color: white;
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    #scale-slider {
+      width: 100%;
+      accent-color: #FF9800;
+      cursor: pointer;
+    }
+
+    .mode-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .mode-label {
+      color: #ddd;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Overlay สำหรับเปิดใช้งานกล้อง -->
+  <div id="start-overlay">
+    <h2>แอพพลิเคชัน AR 3D Viewer</h2>
+    <p>กดปุ่มด้านล่างเพื่อเปิดกล้องส่อง Hiro Marker</p>
+    <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
+  </div>
+
+  <!-- ปุ่ม GUI ควบคุมด้านบน -->
+  <div id="ui-container">
+    <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
+    <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
+    <!-- ปุ่มสำหรับลบโมเดลล่าสุด -->
+    <button class="btn btn-delete" onclick="removeLastModel()">🗑️ ลบโมเดลล่าสุด</button>
+  </div>
+
+  <!-- แถบแนวนอนปรับขนาด + สลับโหมดด้านล่าง -->
+  <div id="bottom-panel">
+    <div class="slider-group">
+      <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
+      <input type="range" id="scale-slider" min="0.05" max="1.5" step="0.02" value="0.2">
+    </div>
+    
+    <div class="mode-group">
+      <span class="mode-label">โหมดนิ้วเดียวลาก:</span>
+      <button class="btn btn-mode" id="mode-btn" onclick="toggleDragMode()">✋ เคลื่อนย้าย (Move)</button>
+    </div>
+  </div>
+
+  <!-- A-Frame Scene -->
+  <a-scene 
+    embedded 
+    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+    renderer="logarithmicDepthBuffer: true; colorManagement: true;"
+    cursor="rayOrigin: mouse"
+    raycaster="objects: .clickable">
+
+    <!-- Preload Assets -->
+    <a-assets>
+      <a-asset-item id="banana-model" src="3_musium1.glb"></a-asset-item>
+      <a-asset-item id="kitchen-model" src="kitchen.glb"></a-asset-item>
+    </a-assets>
+
+    <!-- Camera -->
+    <a-entity camera id="main-camera"></a-entity>
+
+    <!-- Light -->
+    <a-entity light="type: ambient; intensity: 1.0;"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8;" position="1 4 2"></a-entity>
+
+    <!-- HIRO MARKER TRACKING -->
+    <a-marker preset="hiro" id="hiro-marker">
+    </a-marker>
+
+    <!-- Container สำหรับโมเดล Free Placement -->
+    <a-entity id="world-container" position="0 0 -2"></a-entity>
+
+  </a-scene>
+
+  <script>
+    let activeSelectedObject = null;
+    let currentDragMode = 'move';
+    let spawnedModels = []; // อาเรย์สำหรับเก็บอ้างอิงโมเดลที่สร้างขึ้นมาใหม่
+
+    // -------------------------------------------------------------
+    // 1. ระบบกระตุ้นวิดีโอกล้อง และสร้างโมเดลเริ่มต้น
+    // -------------------------------------------------------------
+    document.getElementById('start-btn').addEventListener('click', function() {
+      document.getElementById('start-overlay').style.display = 'none';
+      const video = document.querySelector('video');
+      if (video) {
+        video.play();
+      }
+      
+      // สร้างโมเดลเริ่มต้นเมื่อผู้ใช้กดเริ่มกล้อง
+      if (spawnedModels.length === 0) {
+        spawnModel('banana');
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 2. Component ควบคุมสัมผัส (ปรับปรุงการลาก/หมุนบน Marker)
+    // -------------------------------------------------------------
+    AFRAME.registerComponent('ar-touch-controls', {
+      init: function () {
+        this.isDragging = false;
+        this.initialPinchDistance = null;
+        this.initialAngle = null;
+        this.baseScale = { x: 0.2, y: 0.2, z: 0.2 };
+        this.baseRotation = { x: 0, y: 0, z: 0 };
+        this.previousTouchPos = { x: 0, y: 0 };
+        this.camera = document.querySelector('#main-camera').object3D;
+
+        activeSelectedObject = this.el;
+
+        window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+        window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+        window.addEventListener('touchend', this.onTouchEnd.bind(this));
+
+        this.el.addEventListener('mousedown', this.onMouseDown.bind(this));
+        window.addEventListener('mousemove', this.onMouseMove.bind(this));
+        window.addEventListener('mouseup', this.onMouseUp.bind(this));
+      },
+
+      onTouchStart: function (evt) {
+        // หากผู้ใช้สัมผัสส่วนควบคุม GUI ด้านบนหรือด้านล่าง ให้ไม่ทำงานป้องกันการลากพิกัดหลุด
+        if (evt.target.closest('#ui-container') || evt.target.closest('#bottom-panel')) {
+          return;
+        }
+
+        if (evt.touches.length === 1) {
+          // เลือกโมเดลเสมอเมื่อผู้ใช้แตะสัมผัสบนหน้าจอ
+          this.isDragging = true;
+          activeSelectedObject = this.el;
+          this.previousTouchPos = { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
+          updateSliderValue(this.el.object3D.scale.x);
+        } else if (evt.touches.length === 2 && activeSelectedObject === this.el) {
+          this.isDragging = false;
+          this.initialPinchDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          this.initialAngle = this.getAngle(evt.touches[0], evt.touches[1]);
+          this.baseScale = Object.assign({}, this.el.object3D.scale);
+          this.baseRotation = Object.assign({}, this.el.object3D.rotation);
+        }
+      },
+
+      onTouchMove: function (evt) {
+        if (evt.touches.length === 1 && this.isDragging && activeSelectedObject === this.el) {
+          evt.preventDefault();
+          let touch = evt.touches[0];
+          
+          if (currentDragMode === 'move') {
+            // เคลื่อนย้ายตำแหน่งวัตถุ
+            this.moveObject(touch.clientX, touch.clientY);
+          } else if (currentDragMode === 'rotate') {
+            // หมุนโมเดลอิสระทั้งบนแกน X และ Y
+            let deltaX = touch.clientX - this.previousTouchPos.x;
+            let deltaY = touch.clientY - this.previousTouchPos.y;
+
+            this.el.object3D.rotation.y += deltaX * 0.015;
+            this.el.object3D.rotation.x += deltaY * 0.015;
+
+            this.previousTouchPos = { x: touch.clientX, y: touch.clientY };
+          }
+        } else if (evt.touches.length === 2 && this.initialPinchDistance && activeSelectedObject === this.el) {
+          evt.preventDefault();
+          
+          // 1) Pinch Zoom ย่อ-ขยาย
+          let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
+          let scaleFactor = currentDistance / this.initialPinchDistance;
+          let newScale = Math.max(0.02, Math.min(2.0, this.baseScale.x * scaleFactor));
+          this.el.object3D.scale.set(newScale, newScale, newScale);
+          updateSliderValue(newScale);
+
+          // 2) 2-Finger Rotate หมุนวัตถุ
+          let currentAngle = this.getAngle(evt.touches[0], evt.touches[1]);
+          let angleDelta = currentAngle - this.initialAngle;
+          this.el.object3D.rotation.y = this.baseRotation.y + (angleDelta * Math.PI / 180);
+        }
+      },
+
+      onTouchEnd: function (evt) {
+        if (evt.touches.length < 2) {
+          this.initialPinchDistance = null;
+          this.initialAngle = null;
+        }
+        if (evt.touches.length === 0) {
+          this.isDragging = false;
+        }
+      },
+
+      onMouseDown: function (evt) {
+        if (evt.target.closest('#ui-container') || evt.target.closest('#bottom-panel')) {
+          return;
+        }
+        this.isDragging = true;
+        activeSelectedObject = this.el;
+        this.previousTouchPos = { x: evt.clientX, y: evt.clientY };
+        updateSliderValue(this.el.object3D.scale.x);
+      },
+      onMouseMove: function (evt) {
+        if (this.isDragging && activeSelectedObject === this.el) {
+          if (currentDragMode === 'move') {
+            this.moveObject(evt.clientX, evt.clientY);
+          } else {
+            let deltaX = evt.clientX - this.previousTouchPos.x;
+            let deltaY = evt.clientY - this.previousTouchPos.y;
+            this.el.object3D.rotation.y += deltaX * 0.015;
+            this.el.object3D.rotation.x += deltaY * 0.015;
+            this.previousTouchPos = { x: evt.clientX, y: evt.clientY };
+          }
+        }
+      },
+      onMouseUp: function () {
+        this.isDragging = false;
+      },
+
+      // ฟังก์ชันคำนวณย้ายพิกัดในพื้นที่ 3D Space
+      moveObject: function (clientX, clientY) {
+        let mouse = new THREE.Vector2(
+          (clientX / window.innerWidth) * 2 - 1,
+          -(clientY / window.innerHeight) * 2 + 1
+        );
+
+        let raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(mouse, this.camera);
+
+        let cameraDir = new THREE.Vector3();
+        this.camera.getWorldDirection(cameraDir);
+        
+        let planePoint = this.camera.position.clone().add(cameraDir.multiplyScalar(2));
+        let cameraPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(cameraDir, planePoint);
+
+        let targetPos = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(cameraPlane, targetPos)) {
+          if (this.el.parentNode && this.el.parentNode.object3D) {
+            this.el.parentNode.object3D.worldToLocal(targetPos);
+          }
+          this.el.object3D.position.copy(targetPos);
+        }
+      },
+
+      getDistance: function (t1, t2) {
+        let dx = t1.clientX - t2.clientX;
+        let dy = t1.clientY - t2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+      },
+
+      getAngle: function (t1, t2) {
+        let dx = t2.clientX - t1.clientX;
+        let dy = t2.clientY - t1.clientY;
+        return Math.atan2(dy, dx) * 180 / Math.PI;
+      }
+    });
+
+    // -------------------------------------------------------------
+    // 3. ปุ่มกดสลับโหมดการลาก (Move / Rotate)
+    // -------------------------------------------------------------
+    function toggleDragMode() {
+      const btn = document.getElementById('mode-btn');
+      if (currentDragMode === 'move') {
+        currentDragMode = 'rotate';
+        btn.innerHTML = '🔄 หมุนวัตถุ (Rotate)';
+        btn.style.background = '#FF5722';
+      } else {
+        currentDragMode = 'move';
+        btn.innerHTML = '✋ เคลื่อนย้าย (Move)';
+        btn.style.background = '#9c27b0';
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 4. Slider ปรับขนาดวัตถุ
+    // -------------------------------------------------------------
+    const slider = document.getElementById('scale-slider');
+    
+    slider.addEventListener('input', function() {
+      if (activeSelectedObject) {
+        let val = parseFloat(this.value);
+        activeSelectedObject.object3D.scale.set(val, val, val);
+      }
+    });
+
+    function updateSliderValue(val) {
+      slider.value = val;
+    }
+
+    // -------------------------------------------------------------
+    // 5. ฟังก์ชันเพิ่มวัตถุใหม่ (Spawn Model)
+    // -------------------------------------------------------------
+    function spawnModel(type) {
+      const container = document.querySelector('#world-container');
+      const newEntity = document.createElement('a-entity');
+
+      let initialScale = 0.2;
+      if (type === 'banana') {
+        newEntity.setAttribute('gltf-model', '#banana-model');
+        initialScale = 0.2;
+      } else if (type === 'kitchen') {
+        newEntity.setAttribute('gltf-model', '#kitchen-model');
+        initialScale = 0.08;
+      }
+
+      newEntity.setAttribute('scale', `${initialScale} ${initialScale} ${initialScale}`);
+      
+      const randomX = (Math.random() - 0.5) * 0.4;
+      const randomY = (Math.random() - 0.5) * 0.4;
+      
+      newEntity.setAttribute('position', `${randomX} ${randomY} -1.5`);
+      newEntity.setAttribute('class', 'clickable');
+      newEntity.setAttribute('ar-touch-controls', '');
+
+      container.appendChild(newEntity);
+
+      // บันทึกตัวแปรโมเดลลงใน Array
+      spawnedModels.push(newEntity);
+
+      activeSelectedObject = newEntity;
+      updateSliderValue(initialScale);
+    }
+
+    // -------------------------------------------------------------
+    // 6. ฟังก์ชันลบโมเดลล่าสุด (Remove Last Model)
+    // -------------------------------------------------------------
+    function removeLastModel() {
+      if (spawnedModels.length > 0) {
+        const lastModel = spawnedModels.pop();
+        
+        if (activeSelectedObject === lastModel) {
+          activeSelectedObject = null;
+        }
+
+        if (lastModel && lastModel.parentNode) {
+          lastModel.parentNode.removeChild(lastModel);
+        }
+      }
+    }
+  </script>
+</body>
+</html>
