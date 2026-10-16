@@ -280,7 +280,7 @@
     <!-- Preload Assets -->
     <a-assets>
       <a-asset-item id="banana-model" src="3_musium1.glb"></a-asset-item>
-      <a-asset-item id="kitchen-model" src="Duck.glb"></a-asset-item>
+      <a-asset-item id="kitchen-model" src="kitchen.glb"></a-asset-item>
     </a-assets>
 
     <!-- Camera -->
@@ -303,6 +303,26 @@
     let activeSelectedObject = null;
     let currentDragMode = 'move';
     let spawnedModels = [];
+
+    // -------------------------------------------------------------
+    // Component แก้ปัญหาโมเดลใหม่มืดดำ (Re-apply Lighting & Material)
+    // -------------------------------------------------------------
+    AFRAME.registerComponent('model-lighting-fix', {
+      init: function () {
+        this.el.addEventListener('model-loaded', () => {
+          const obj = this.el.getObject3D('mesh');
+          if (obj) {
+            obj.traverse((node) => {
+              if (node.isMesh && node.material) {
+                // ปรับตั้งค่า Material ให้เปิดรับแสงแบบเรียลไทม์
+                node.material.needsUpdate = true;
+                if (node.material.map) node.material.map.needsUpdate = true;
+              }
+            });
+          }
+        });
+      }
+    });
 
     // -------------------------------------------------------------
     // ฟังก์ชัน ซ่อน/แสดง แผงควบคุม Sidebar
@@ -361,13 +381,11 @@
         }
 
         if (evt.touches.length === 1) {
-          // สัมผัส 1 นิ้ว (ลาก/หมุน)
           this.isDragging = true;
           activeSelectedObject = this.el;
           this.previousTouchPos = { x: evt.touches[0].clientX, y: evt.touches[0].clientY };
           updateSliderValue(this.el.object3D.scale.x);
         } else if (evt.touches.length === 2 && activeSelectedObject === this.el) {
-          // สัมผัส 2 นิ้ว (Pinch Zoom ย่อ-ขยาย)
           this.isDragging = false;
           this.initialPinchDistance = this.getDistance(evt.touches[0], evt.touches[1]);
           this.baseScale = Object.assign({}, this.el.object3D.scale);
@@ -391,7 +409,6 @@
 
           this.previousTouchPos = { x: touch.clientX, y: touch.clientY };
         } else if (evt.touches.length === 2 && this.initialPinchDistance && activeSelectedObject === this.el) {
-          // คำนวณการย่อ-ขยายจากระยะถ่างของ 2 นิ้ว
           evt.preventDefault();
           let currentDistance = this.getDistance(evt.touches[0], evt.touches[1]);
           let scaleFactor = currentDistance / this.initialPinchDistance;
@@ -504,6 +521,9 @@
       newEntity.setAttribute('position', `${randomX} ${randomY} -1.5`);
       newEntity.setAttribute('class', 'clickable');
       newEntity.setAttribute('ar-touch-controls', '');
+      
+      // เพิ่ม Component เพื่อปรับแก้ Material & Lighting ของโมเดลสร้างใหม่ให้ได้รับแสงสว่างปกติ
+      newEntity.setAttribute('model-lighting-fix', '');
 
       container.appendChild(newEntity);
 
