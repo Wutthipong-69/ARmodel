@@ -41,18 +41,60 @@
       padding: 20px;
     }
 
-    #ui-container {
-      position: absolute;
-      top: 15px;
-      left: 50%;
-      transform: translateX(-50%);
+    /* -------------------------------------------------------------
+       ปรับแต่ง Sidebar ด้านข้างสำหรับเก็บแผงควบคุม UI ทั้งหมด
+    ------------------------------------------------------------- */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 280px;
+      max-width: 80%;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(8px);
       z-index: 1000;
+      transform: translateX(-100%); /* ซ่อนไว้ทางซ้ายโดยเริ่มต้น */
+      transition: transform 0.3s ease-in-out;
       display: flex;
-      gap: 10px;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 10px 15px;
-      border-radius: 25px;
+      flex-direction: column;
+      padding: 20px 15px;
+      box-sizing: border-box;
+      gap: 15px;
+      overflow-y: auto;
+      color: white;
+    }
+
+    #sidebar.active {
+      transform: translateX(0); /* ขยายออกมาเมื่อมี class 'active' */
+    }
+
+    /* ปุ่มสำหรับสลับซ่อน/แสดง Sidebar */
+    #sidebar-toggle-btn {
+      position: fixed;
+      top: 15px;
+      left: 15px;
+      z-index: 1001;
+      background: rgba(0, 0, 0, 0.75);
+      color: white;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(5px);
+    }
+
+    #ui-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
     }
 
     .btn {
@@ -65,6 +107,7 @@
       border-radius: 20px;
       cursor: pointer;
       box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      width: 100%;
     }
 
     .btn-main {
@@ -73,6 +116,7 @@
       padding: 15px 30px;
       border-radius: 30px;
       margin-top: 15px;
+      width: auto;
     }
 
     .btn-secondary {
@@ -87,27 +131,17 @@
     .btn-mode {
       background: #9c27b0;
       font-size: 12px;
-      padding: 6px 12px;
+      padding: 8px 12px;
       border-radius: 12px;
+      width: 100%;
     }
 
     #bottom-panel {
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 1000;
-      width: 85%;
-      max-width: 360px;
-      background: rgba(0, 0, 0, 0.75);
-      padding: 12px 18px;
-      border-radius: 20px;
+      width: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
-      backdrop-filter: blur(5px);
-      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      gap: 12px;
     }
 
     .slider-group {
@@ -132,8 +166,10 @@
 
     .mode-group {
       display: flex;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       align-items: center;
+      width: 100%;
     }
 
     .mode-label {
@@ -176,6 +212,14 @@
       background: #e68a00;
       transform: scale(0.95);
     }
+
+    hr {
+      border: 0;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.2);
+      width: 100%;
+      margin: 5px 0;
+    }
   </style>
 </head>
 <body>
@@ -187,35 +231,45 @@
     <button class="btn btn-main" id="start-btn">📷 เริ่มใช้งานกล้อง</button>
   </div>
 
-  <!-- ปุ่ม GUI ควบคุมด้านบน -->
-  <div id="ui-container">
-    <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
-    <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
-    <!-- ปุ่มสำหรับลบโมเดลล่าสุด -->
-    <button class="btn btn-delete" onclick="removeLastModel()">🗑️ ลบโมเดลล่าสุด</button>
-  </div>
+  <!-- ปุ่มไอคอนเปิด/ปิด Sidebar แผงควบคุมด้านข้าง -->
+  <button id="sidebar-toggle-btn" onclick="toggleSidebar()">⚙️</button>
 
-  <!-- แถบแนวนอนปรับขนาด + สลับโหมด + ปุ่มลูกศรควบคุมทิศทางด้านล่าง -->
-  <div id="bottom-panel">
-    <div class="slider-group">
-      <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
-      <input type="range" id="scale-slider" min="0.05" max="1.5" step="0.02" value="0.2">
-    </div>
-    
-    <div class="mode-group">
-      <span class="mode-label">โหมดนิ้วเดียวลาก:</span>
-      <button class="btn btn-mode" id="mode-btn" onclick="toggleDragMode()">✋ เคลื่อนย้าย (Move)</button>
+  <!-- Sidebar สำหรับเก็บคอนโทรลเลอร์ควบคุมทั้งหมด -->
+  <div id="sidebar">
+    <h3 style="margin: 0 0 10px 0; text-align: center;">⚙️ แผงควบคุม</h3>
+
+    <!-- ปุ่ม GUI ควบคุม -->
+    <div id="ui-container">
+      <button class="btn" onclick="spawnModel('banana')">🍌 เพิ่ม Banana</button>
+      <button class="btn btn-secondary" onclick="spawnModel('kitchen')">🍳 เพิ่ม Kitchen</button>
+      <!-- ปุ่มสำหรับลบโมเดลล่าสุด -->
+      <button class="btn btn-delete" onclick="removeLastModel()">🗑️ ลบโมเดลล่าสุด</button>
     </div>
 
-    <!-- แผงปุ่มลูกศรควบคุมเคลื่อนย้าย (ขึ้น-ลง-ซ้าย-ขวา) -->
-    <div class="dpad-container">
-      <div class="dpad-row">
-        <button class="btn-dpad" onclick="moveActiveObject('up')">⬆️</button>
+    <hr>
+
+    <!-- แผงปรับขนาด + สลับโหมด + ปุ่มลูกศรควบคุมทิศทาง -->
+    <div id="bottom-panel">
+      <div class="slider-group">
+        <label for="scale-slider">🔍 ปรับขนาดโมเดลที่เลือก</label>
+        <input type="range" id="scale-slider" min="0.05" max="1.5" step="0.02" value="0.2">
       </div>
-      <div class="dpad-row">
-        <button class="btn-dpad" onclick="moveActiveObject('left')">⬅️</button>
-        <button class="btn-dpad" onclick="moveActiveObject('down')">⬇️</button>
-        <button class="btn-dpad" onclick="moveActiveObject('right')">➡️</button>
+      
+      <div class="mode-group">
+        <span class="mode-label">โหมดนิ้วเดียวลาก:</span>
+        <button class="btn btn-mode" id="mode-btn" onclick="toggleDragMode()">✋ เคลื่อนย้าย (Move)</button>
+      </div>
+
+      <!-- แผงปุ่มลูกศรควบคุมเคลื่อนย้าย (ขึ้น-ลง-ซ้าย-ขวา) -->
+      <div class="dpad-container">
+        <div class="dpad-row">
+          <button class="btn-dpad" onclick="moveActiveObject('up')">⬆️</button>
+        </div>
+        <div class="dpad-row">
+          <button class="btn-dpad" onclick="moveActiveObject('left')">⬅️</button>
+          <button class="btn-dpad" onclick="moveActiveObject('down')">⬇️</button>
+          <button class="btn-dpad" onclick="moveActiveObject('right')">➡️</button>
+        </div>
       </div>
     </div>
   </div>
@@ -256,6 +310,21 @@
     let spawnedModels = []; // อาเรย์สำหรับเก็บอ้างอิงโมเดลที่สร้างขึ้นมาใหม่
 
     // -------------------------------------------------------------
+    // ฟังก์ชัน ซ่อน/แสดง แผงควบคุม Sidebar
+    // -------------------------------------------------------------
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const toggleBtn = document.getElementById('sidebar-toggle-btn');
+      sidebar.classList.toggle('active');
+
+      if (sidebar.classList.contains('active')) {
+        toggleBtn.innerHTML = '❌';
+      } else {
+        toggleBtn.innerHTML = '⚙️';
+      }
+    }
+
+    // -------------------------------------------------------------
     // 1. ระบบกระตุ้นวิดีโอกล้อง และสร้างโมเดลเริ่มต้น
     // -------------------------------------------------------------
     document.getElementById('start-btn').addEventListener('click', function() {
@@ -291,8 +360,8 @@
       },
 
       onTouchStart: function (evt) {
-        // หากผู้ใช้สัมผัสปุ่ม UI ไม่ต้องเริ่มการลากโมเดล
-        if (evt.target.closest('#ui-container') || evt.target.closest('#bottom-panel')) {
+        // หากผู้ใช้สัมผัสส่วนเมนู Sidebar หรือปุ่มเปิดปิด ให้ไม่เริ่มลากโมเดล
+        if (evt.target.closest('#sidebar') || evt.target.closest('#sidebar-toggle-btn')) {
           return;
         }
 
@@ -312,7 +381,7 @@
           let deltaY = touch.clientY - this.previousTouchPos.y;
           
           if (currentDragMode === 'move') {
-            // คำนวณเคลื่อนย้ายตำแหน่งพิกัด X และ Y โดยตรง ลากได้ลื่นไหล ไม่หายไปจากหน้าจอ
+            // คำนวณเคลื่อนย้ายตำแหน่งพิกัด X และ Y โดยตรง
             this.el.object3D.position.x += deltaX * 0.005;
             this.el.object3D.position.y -= deltaY * 0.005;
           } else if (currentDragMode === 'rotate') {
@@ -332,7 +401,7 @@
       },
 
       onMouseDown: function (evt) {
-        if (evt.target.closest('#ui-container') || evt.target.closest('#bottom-panel')) {
+        if (evt.target.closest('#sidebar') || evt.target.closest('#sidebar-toggle-btn')) {
           return;
         }
         this.isDragging = true;
