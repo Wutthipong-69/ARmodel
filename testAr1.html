@@ -5,35 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>PSU Payoon AR Fix</title>
     
+    <!-- ใช้ CDN ที่เสถียร -->
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
-        /* แก้ปัญหาหน้าจอดำ: บังคับให้ Video อยู่ด้านหลัง และ Canvas โปร่งใส */
         body { margin: 0; overflow: hidden; }
         
-        /* บังคับให้ Video ของกล้องอยู่เลเยอร์ล่างสุด */
-        video {
-            position: absolute !important;
-            top: 0;
-            left: 0;
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
-            z-index: -1 !important;
-        }
-
-        /* UI Overlay */
+        /* ส่วนควบคุม UI */
         #ui-container {
             position: fixed;
             bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
             width: 80%;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 15px;
-            border-radius: 20px;
-            z-index: 9999; /* ให้ UI อยู่บนสุดเสมอ */
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 15px;
+            z-index: 9999;
             text-align: center;
         }
         #instructions {
@@ -45,43 +34,43 @@
             background: rgba(0,0,0,0.5);
             z-index: 9999;
             padding: 5px 0;
+            font-family: sans-serif;
         }
     </style>
 </head>
 
 <body>
-    <div id="instructions">สแกน Hiro Marker</div>
+    <div id="instructions">กำลังรอการเข้าถึงกล้อง... (กรุณากด Allow)</div>
     
     <div id="ui-container">
-        <label style="display:block; margin-bottom:5px;">ปรับขนาดโมเดล</label>
+        <label style="display:block; font-size: 12px;">ปรับขนาดโมเดล</label>
         <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1" style="width:100%;">
     </div>
 
     <!-- 
-        ปรับปรุง a-scene: 
-        1. ใส่ embedded เพื่อให้ทำงานร่วมกับ HTML ปกติได้ดี
-        2. ลบพื้นหลัง (background: none) เพื่อไม่ให้ทับวิดีโอ
+        หัวใจสำคัญของการแก้ปัญหา:
+        1. ลบ background="..." ออกทั้งหมด เพื่อให้เห็นภาพจากกล้อง
+        2. ใช้ sourceType: webcam
+        3. ไม่ต้องใส่สีพื้นหลังใน a-scene
     -->
     <a-scene 
         embedded 
-        arjs="sourceType: webcam; debug: false;"
+        arjs="sourceType: webcam; debug: false; detectionMode: mono_and_matrix; matrixCodeType: most;"
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true; colorManagement: true;"
-        > <!-- เปลี่ยนเป็นสีขาวหรือค่าว่างเพื่อลดปัญหาหน้าจอดำ -->
+        renderer="logarithmicDepthBuffer: true;">
 
         <a-assets>
-            <!-- สำคัญ: หากใช้บน GitHub ให้เปลี่ยน url เป็นชื่อไฟล์ที่อยู่ในโฟลเดอร์เดียวกัน -->
-            <!-- ตัวอย่าง: url="my_model.glb" -->
-            <a-asset-loader id="model-loader" url="Duck.glb"></a-asset-loader>
+            <!-- ใช้ไฟล์โมเดลที่คุณอัปโหลดไว้ใน GitHub โดยตรง -->
+            <a-asset-loader id="model-loader" url="kitchen.glb"></a-asset-loader>
         </a-assets>
 
+        <!-- Marker: Hiro Marker -->
         <a-marker preset="hiro" id="marker">
             <a-entity 
                 id="main-model"
                 gltf-model="#model-loader"
-                position="0 0 0"
                 scale="1 1 1"
-                rotation="0 0 0">
+                position="0 0 0">
             </a-entity>
         </a-marker>
 
@@ -91,18 +80,23 @@
     <script>
         const model = document.querySelector('#main-model');
         const slider = document.querySelector('#scale-slider');
+        const instruction = document.querySelector('#instructions');
 
-        // ปรับขนาด
+        // เมื่อโหลดหน้าเว็บเสร็จ ให้แจ้งสถานะ
+        window.addEventListener('load', () => {
+            instruction.innerText = "สแกน Hiro Marker เพื่อเริ่ม";
+        });
+
+        // ระบบปรับขนาด
         slider.addEventListener('input', (e) => {
             const s = e.target.value;
             model.setAttribute('scale', `${s} ${s} ${s}`);
         });
 
-        // ระบบแตะเพื่อย้ายตำแหน่ง (Tap to move)
+        // ระบบแตะเพื่อย้าย (Tap to move)
         window.addEventListener('touchstart', (e) => {
-            // ป้องกันไม่ให้การแตะไปรบกวน Slider
             if (e.target.id === 'scale-slider') return;
-
+            
             const pos = model.getAttribute('position');
             model.setAttribute('position', { 
                 x: pos.x + 0.1, 
