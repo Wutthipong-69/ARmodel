@@ -1,40 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>PSU Payoon AR System</title>
+    <title>PSU Payoon AR Fix</title>
     
-    <!-- A-Frame Library -->
     <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
-    <!-- AR.js for A-Frame -->
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
     <style>
-        /* UI Overlay Styles */
+        /* แก้ปัญหาหน้าจอดำ: บังคับให้ Video อยู่ด้านหลัง และ Canvas โปร่งใส */
+        body { margin: 0; overflow: hidden; }
+        
+        /* บังคับให้ Video ของกล้องอยู่เลเยอร์ล่างสุด */
+        video {
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+            z-index: -1 !important;
+        }
+
+        /* UI Overlay */
         #ui-container {
             position: fixed;
-            bottom: 20px;
+            bottom: 30px;
             left: 50%;
             transform: translateX(-50%);
             width: 80%;
-            max-width: 300px;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.9);
             padding: 15px;
-            border-radius: 15px;
-            z-index: 1000;
-            font-family: sans-serif;
+            border-radius: 20px;
+            z-index: 9999; /* ให้ UI อยู่บนสุดเสมอ */
             text-align: center;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-        .slider-label {
-            display: block;
-            margin-bottom: 10px;
-            font-weight: bold;
-            color: #333;
-        }
-        input[type=range] {
-            width: 100%;
         }
         #instructions {
             position: fixed;
@@ -43,45 +43,45 @@
             text-align: center;
             color: white;
             background: rgba(0,0,0,0.5);
+            z-index: 9999;
             padding: 5px 0;
-            z-index: 1000;
-            font-family: sans-serif;
         }
     </style>
 </head>
 
-<body style="margin: 0; overflow: hidden;">
-
-    <!-- UI Elements -->
-    <div id="instructions">สแกน Hiro Marker เพื่อเริ่มแสดงโมเดล</div>
+<body>
+    <div id="instructions">สแกน Hiro Marker</div>
     
     <div id="ui-container">
-        <label class="slider-label" for="scale-slider">ปรับขนาดโมเดล</label>
-        <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1">
+        <label style="display:block; margin-bottom:5px;">ปรับขนาดโมเดล</label>
+        <input type="range" id="scale-slider" min="0.1" max="3" step="0.1" value="1" style="width:100%;">
     </div>
 
-    <!-- A-Frame Scene -->
+    <!-- 
+        ปรับปรุง a-scene: 
+        1. ใส่ embedded เพื่อให้ทำงานร่วมกับ HTML ปกติได้ดี
+        2. ลบพื้นหลัง (background: none) เพื่อไม่ให้ทับวิดีโอ
+    -->
     <a-scene 
         embedded 
-        arjs="sourceType: webcam; debug: false; detectionMode: mono_and_matrix; matrixCodeType: most;"
+        arjs="sourceType: webcam; debug: false;"
         vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true;">
+        renderer="logarithmicDepthBuffer: true; colorManagement: true;"
+        background="color: #fff"> <!-- เปลี่ยนเป็นสีขาวหรือค่าว่างเพื่อลดปัญหาหน้าจอดำ -->
 
-        <!-- Assets: ใส่ URL โมเดลของคุณที่นี่ -->
         <a-assets>
+            <!-- สำคัญ: หากใช้บน GitHub ให้เปลี่ยน url เป็นชื่อไฟล์ที่อยู่ในโฟลเดอร์เดียวกัน -->
+            <!-- ตัวอย่าง: url="my_model.glb" -->
             <a-asset-loader id="model-loader" url="https://raw.githack.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb"></a-asset-loader>
         </a-assets>
 
-        <!-- Marker: ในที่นี้ใช้ Hiro Marker -->
         <a-marker preset="hiro" id="marker">
-            <!-- Model Entity -->
             <a-entity 
                 id="main-model"
                 gltf-model="#model-loader"
                 position="0 0 0"
                 scale="1 1 1"
-                rotation="0 0 0"
-                class="clickable">
+                rotation="0 0 0">
             </a-entity>
         </a-marker>
 
@@ -91,44 +91,25 @@
     <script>
         const model = document.querySelector('#main-model');
         const slider = document.querySelector('#scale-slider');
-        const marker = document.querySelector('#marker');
 
-        // 1. ระบบปรับขนาด (Scaling) ผ่าน Slider
-        slider.addEventListener('input', function (event) {
-            const scaleValue = event.target.value;
-            // ปรับ scale ทั้งแกน X, Y, Z ให้เท่ากัน
-            model.setAttribute('scale', `${scaleValue} ${scaleValue} ${scaleValue}`);
+        // ปรับขนาด
+        slider.addEventListener('input', (e) => {
+            const s = e.target.value;
+            model.setAttribute('scale', `${s} ${s} ${s}`);
         });
 
-        // 2. ระบบแตะเพื่อย้ายตำแหน่ง (Movement/Positioning)
-        // หมายเหตุ: ใน Marker-based AR โมเดลจะผูกกับ Marker 
-        // การ "ย้าย" คือการเปลี่ยนตำแหน่งสัมพัทธ์ (Relative Position) ภายใน Marker นั้นๆ
-        window.addEventListener('click', function (event) {
-            // ตรวจสอบว่ามีการแตะที่ตัวโมเดลหรือไม่ (ผ่าน raycaster ของ A-Frame)
-            // ในตัวอย่างนี้จะใช้การแตะที่หน้าจอเพื่อเลื่อนโมเดลไปทางซ้าย/ขวาแบบง่าย
-            
-            const currentPos = model.getAttribute('position');
-            
-            // สุ่มตำแหน่งใหม่เล็กน้อยรอบๆ จุดศูนย์กลางของ Marker เพื่อให้ดูเหมือนการเคลื่อนย้าย
-            // หรือจะทำเป็นระบบ Drag ก็ได้ แต่สำหรับมือถือการ Tap/Click จะเสถียรกว่า
-            const newX = currentPos.x + (Math.random() * 0.4 - 0.2);
-            const newZ = currentPos.z + (Math.random() * 0.4 - 0.2);
-            
-            model.setAttribute('position', { x: newX, y: 0, z: newZ });
-        });
+        // ระบบแตะเพื่อย้ายตำแหน่ง (Tap to move)
+        window.addEventListener('touchstart', (e) => {
+            // ป้องกันไม่ให้การแตะไปรบกวน Slider
+            if (e.target.id === 'scale-slider') return;
 
-        // ปรับแต่งเพื่อให้รองรับการ Touch บนสมาร์ทโฟน
-        document.addEventListener('touchstart', function (event) {
-            // ลอจิกการเคลื่อนที่เมื่อมีการแตะหน้าจอ
-            const currentPos = model.getAttribute('position');
-            // ย้ายตำแหน่งไปด้านหน้าหรือด้านข้างเล็กน้อย
+            const pos = model.getAttribute('position');
             model.setAttribute('position', { 
-                x: currentPos.x + 0.1, 
+                x: pos.x + 0.1, 
                 y: 0, 
-                z: currentPos.z 
+                z: pos.z 
             });
-        }, {passive: true});
-
+        });
     </script>
 </body>
 </html>
