@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Google Maps - Custom Markers Example</title>
+    <style>
+      /* กำหนดขนาดของพื้นที่แสดงแผนที่ */
+      #map {
+        height: 100vh;
+        width: 100%;
+      }
+      body, html {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- พื้นที่สำหรับแสดงแผนที่ -->
+    <div id="map"></div>
+
+    <script>
+      function initMap() {
+        // 1. ตั้งค่าพิกัดเริ่มต้น (ศูนย์กลางแผนที่ - กรุงเทพฯ)
+        const centerLatLng = { lat: 13.746, lng: 100.535 };
+
+        // 2. สร้างแผนที่
+        const map = new google.maps.Map(document.getElementById("map"), {
+          zoom: 13,
+          center: centerLatLng,
+        });
+
+        // ----------------------------------------------------
+        // นิยามลักษณะของ Marker 4 รูปแบบแตกต่างกัน
+        // ----------------------------------------------------
+
+        // แบบที่ 1: ใช้รูปภาพ Icon แบบกำหนดเองจาก URL
+        const customImageIcon = {
+          url: "https://maps.google.com/mapfiles/kml/pal2/icon2.png",
+          scaledSize: new google.maps.Size(40, 40)
+        };
+        const custom2 = {
+          url: "../imgH/mapicons/business.png",
+          scaledSize: new google.maps.Size(40, 40)
+        };
+
+        // แบบที่ 2: เปลี่ยนสีหมุดมาตรฐาน (Color Pin) ผ่านภาพของ Google
+        const bluePinIcon = "http://maps.google.com/mapfiles/ms/icons/blue-dot.png";
+        const yellowPinIcon = "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png";
+
+        // แบบที่ 3: วาดไอคอนด้วย SVG (Circle / Shape)
+        const svgCircleIcon = {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 17,
+          fillColor: "#FF5722", // สีส้ม
+          fillOpacity: 0.9,
+          strokeWeight: 2,
+          strokeColor: "#FFFFFF"
+        };
+
+        // แบบที่ 4: วาดไอคอนด้วย SVG รูปดาว (Custom Vector)
+        const svgStarIcon = {
+          path: "M 0,-24 L 6,-7 L 24,-7 L 10,4 L 15,21 L 0,11 L -15,21 L -10,4 L -24,-7 L -6,-7 Z",
+          fillColor: "#9C27B0", // สีม่วง
+          fillOpacity: 1,
+          scale: 0.8,
+          strokeColor: "#FFFFFF",
+          strokeWeight: 2,
+        };
+
+        // ----------------------------------------------------
+        // ข้อมูลสถานที่ 6 จุด พร้อมกำหนดรูปแบบหมุด (Type 1 - 4)
+        // ----------------------------------------------------
+        const locations = [
+          {
+            title: "จุดที่ 1: สยามพารากอน (แบบที่ 1: Custom Image Icon)",
+            position: { lat: 13.746, lng: 100.535 },
+            icon: customImageIcon
+          },
+          {
+            title: "จุดที่ 2: เซ็นทรัลเวิลด์ (แบบที่ 1: Custom Image Icon)",
+            position: { lat: 13.7466, lng: 100.5391 },
+            icon: customImageIcon
+          },
+          {
+            title: "จุดที่ 3: สวนลุมพินี (แบบที่ 2: Colored Pin - สีฟ้า)",
+            position: { lat: 13.7314, lng: 100.5414 },
+            icon: bluePinIcon
+          },
+          {
+            title: "จุดที่ 4: อนุสาวรีย์ชัยสมรภูมิ (แบบที่ 2: Colored Pin - สีเหลือง)",
+            position: { lat: 13.7649, lng: 100.5383 },
+            icon: svgStarIcon
+          },
+          {
+            title: "จุดที่ 5: วัดสระเกศ (แบบที่ 3: SVG Circle Vector)",
+            position: { lat: 13.7538, lng: 100.5066 },
+            icon: svgCircleIcon
+          },
+          {
+            title: "จุดที่ 6: ไอคอนสยาม (แบบที่ 4: SVG Star Vector)",
+            position: { lat: 13.7267, lng: 100.5108 },
+            icon: custom2
+          }
+        ];
+
+        // ----------------------------------------------------
+        // วนลูปสร้าง Marker และ InfoWindow สำหรับแต่ละจุด
+        // ----------------------------------------------------
+        const infoWindow = new google.maps.InfoWindow();
+
+        locations.forEach((loc) => {
+          const marker = new google.maps.Marker({
+            position: loc.position,
+            map: map,
+            title: loc.title,
+            icon: loc.icon, // ใส่รูปแบบไอคอนที่กำหนดไว้
+            animation: google.maps.Animation.DROP // เพิ่มอนิเมชันตอนโหลด
+          });
+
+          // เมื่อคลิกที่ Marker ให้แสดงป้ายชื่อสถานที่
+          marker.addListener("click", () => {
+            infoWindow.setContent(`<strong>${loc.title}</strong>`);
+            infoWindow.open(map, marker);
+          });
+        });
+      }
+    </script>
+
+    <!-- เรียกใช้งาน Google Maps API (อย่าลืมใส่ API Key ของคุณใน YOUR_API_KEY) -->
+    <script
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC5l0aPyGFqiqY5DpqOYf-8YhN_eYHHobU&callback=initMap"
+      async
+      defer
+    ></script>
+  </body>
+</html>
